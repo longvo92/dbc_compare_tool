@@ -1,0 +1,7 @@
+VERSION ""
+
+BO_ 100 BCM_Status: 8 BCM
+ SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|250] "km/h" ECM,IC
+ SG_ IgnitionState : 16|2@1+ (1,0) [0|3] "" ECM
+BA_ "GenMsgCycleTime" BO_ 100 10;
+

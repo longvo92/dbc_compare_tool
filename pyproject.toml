@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbc-compare-tool"
+version = "0.1.0"
+description = "Desktop DBC baseline comparison tool with Excel reporting"
+requires-python = ">=3.10"
+dependencies = [
+    "openpyxl>=3.1.0",
+    "PySide6>=6.7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

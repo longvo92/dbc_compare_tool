@@ -1,0 +1,9 @@
+VERSION ""
+
+BO_ 100 Body_Status: 8 BCM
+ SG_ VehSpd : 0|16@1+ (0.01,0) [0|250] "km/h" ECM,IC
+ SG_ IgnitionState : 16|2@1+ (1,0) [0|3] "" ECM
+BO_ 200 Diagnostics_Status: 8 ECU
+ SG_ DiagState : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+BA_ "GenMsgCycleTime" BO_ 100 10;
+
