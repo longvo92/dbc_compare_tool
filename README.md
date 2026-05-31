@@ -7,13 +7,14 @@ Desktop utility for comparing Automotive CAN DBC baseline folders and generating
 - Select an old baseline folder and a new baseline folder.
 - Automatically discovers all `.dbc` files.
 - Detects added, removed, modified, and renamed messages.
-- Detects added, removed, modified, and renamed signals.
+- Detects added, removed, modified, and renamed signals, including when the `.dbc` file itself was renamed.
 - Generates one Excel workbook with exactly three sheets:
   - `Summary`
   - `Message Details`
   - `Signal Details`
 
-Rename detection uses structural matching first. Name similarity is only supporting evidence.
+Rename detection uses structural matching first. Name similarity is only supporting evidence. Files with different
+relative paths are paired by CAN ID and message-layout overlap before message and signal comparison runs.
 
 ## Architecture
 
@@ -52,4 +53,3 @@ Run from CLI:
 .\.venv\Scripts\python.exe -m pip install pyinstaller
 .\.venv\Scripts\pyinstaller.exe packaging\dbc_compare_tool.spec
 ```
-

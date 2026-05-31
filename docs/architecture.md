@@ -13,8 +13,9 @@ This project is a local Windows desktop application for automotive engineers com
 
 2. Comparison Engine
    - Discovers `.dbc` files in old and new baseline folders.
-   - Compares common files.
-   - Treats newly added or removed files as added or removed message groups.
+   - Compares files with the same relative path first.
+   - Pairs old-only and new-only `.dbc` files by CAN ID overlap and message-layout similarity.
+   - Treats still-unmatched files as added or removed message groups.
    - Delegates rename decisions to detector components.
 
 3. Rename Detection Engine
@@ -34,6 +35,13 @@ This project is a local Windows desktop application for automotive engineers com
    - PyInstaller spec for producing a standalone Windows application.
 
 ## Rename Strategy
+
+DBC file pairing prioritizes:
+
+- CAN ID overlap
+- Common message structural similarity
+- Message-name overlap
+- File-name similarity as supporting evidence only
 
 Message rename scoring prioritizes:
 
@@ -73,4 +81,3 @@ The detector uses greedy one-to-one matching over candidates above threshold. Th
 3. Real-project calibration tests using anonymized DBC baselines.
 4. Packaging smoke test on a clean Windows machine.
 5. Optional richer parsing if engineers need comments, value tables, multiplexing, or attributes in reports.
-

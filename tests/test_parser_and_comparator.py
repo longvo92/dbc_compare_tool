@@ -62,6 +62,24 @@ class ParserAndComparatorTests(unittest.TestCase):
         self.assertEqual(result.summary()["Messages Removed"], 0)
         self.assertEqual(result.summary()["Messages Added"], 0)
 
+    def test_detects_renames_when_dbc_file_is_renamed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old_folder = root / "old"
+            new_folder = root / "new"
+            old_folder.mkdir()
+            new_folder.mkdir()
+            (old_folder / "PCANv1.dbc").write_text(OLD_DBC, encoding="utf-8")
+            (new_folder / "PCANv2.dbc").write_text(NEW_DBC, encoding="utf-8")
+
+            result = DbcComparator().compare_folders(old_folder, new_folder)
+
+        self.assertEqual(result.summary()["Messages Renamed"], 1)
+        self.assertEqual(result.summary()["Signals Renamed"], 1)
+        self.assertEqual(result.summary()["Messages Removed"], 0)
+        self.assertEqual(result.summary()["Messages Added"], 0)
+        self.assertEqual(result.message_changes[0].dbc_file, "PCANv1.dbc -> PCANv2.dbc")
+
     def test_detects_modified_and_added_items(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -81,4 +99,3 @@ class ParserAndComparatorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
