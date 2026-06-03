@@ -22,12 +22,39 @@ BO_ 100 Body_Status: 8 BCM
 BA_ "GenMsgCycleTime" BO_ 100 10;
 """
 
+NAMESPACE_AND_ENV_DBC = """VERSION ""
+NS_ :
+    SG_
+    BO_
+BS_:
+BU_: Vector__XXX BCM ECM IC
+EV_ IgnitionEnv : 0 [0|1] "" 0 0 DUMMY_NODE_VECTOR0 Vector__XXX;
+BO_ 100 BCM_Status: 8 BCM
+ SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|250] "km/h" ECM,IC
+"""
+
+EXTENDED_MUX_DBC = """VERSION ""
+BO_ 2147483912 EXT_MSG: 8 Vector__XXX
+ SG_ Mode M : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ BigEndianValue m1 : 8|8@0- (0.5,-1) [-1|127] "u" ECU1,ECU2
+"""
+
 MODIFIED_DBC = """VERSION ""
 BO_ 100 BCM_Status: 8 BCM
  SG_ VehicleSpeed : 0|16@1+ (0.02,0) [0|250] "km/h" ECM,IC
  SG_ IgnitionState : 16|2@1+ (1,0) [0|3] "" ECM
 BO_ 200 New_Message: 8 ECU
  SG_ NewSignal : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
+DIFFERENT_ID_DBC = """VERSION ""
+BO_ 101 BCM_Status: 8 BCM
+ SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|250] "km/h" ECM,IC
+"""
+
+DIFFERENT_BYTE_ORDER_SIGNAL_DBC = """VERSION ""
+BO_ 100 BCM_Status: 8 BCM
+ SG_ VehSpd : 0|16@0+ (0.01,0) [0|250] "km/h" ECM,IC
 """
 
 
@@ -44,6 +71,33 @@ class ParserAndComparatorTests(unittest.TestCase):
         self.assertEqual(message.dlc, 8)
         self.assertEqual(message.cycle_time_ms, 10)
         self.assertEqual(message.signals["VehicleSpeed"].factor, 0.01)
+
+    def test_parse_ignores_namespace_signals_before_messages_and_environment_variables(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "Bus_A.dbc"
+            path.write_text(NAMESPACE_AND_ENV_DBC, encoding="utf-8")
+
+            database = parse_dbc(path)
+
+        self.assertIn("BCM_Status", database.messages)
+        self.assertIn("VehicleSpeed", database.messages["BCM_Status"].signals)
+
+    def test_parse_extended_frame_id_and_multiplexed_signals(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "Ext.dbc"
+            path.write_text(EXTENDED_MUX_DBC, encoding="utf-8")
+
+            database = parse_dbc(path)
+
+        message = database.messages["EXT_MSG"]
+        self.assertEqual(message.can_id, 264)
+        self.assertTrue(message.is_extended_frame)
+        self.assertTrue(message.signals["Mode"].is_multiplexer)
+        muxed_signal = message.signals["BigEndianValue"]
+        self.assertEqual(muxed_signal.byte_order, 0)
+        self.assertEqual(muxed_signal.value_type, "signed")
+        self.assertEqual(muxed_signal.multiplexer_ids, (1,))
+        self.assertEqual(muxed_signal.multiplexer_signal, "Mode")
 
     def test_detects_message_and_signal_renames_structurally(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -94,6 +148,39 @@ class ParserAndComparatorTests(unittest.TestCase):
 
         self.assertEqual(result.summary()["Signals Modified"], 1)
         self.assertEqual(result.summary()["Messages Added"], 1)
+        self.assertEqual(result.summary()["Signals Added"], 1)
+
+    def test_message_rename_requires_same_frame_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old_folder = root / "old"
+            new_folder = root / "new"
+            old_folder.mkdir()
+            new_folder.mkdir()
+            (old_folder / "Bus_A.dbc").write_text(OLD_DBC, encoding="utf-8")
+            (new_folder / "Bus_A.dbc").write_text(DIFFERENT_ID_DBC, encoding="utf-8")
+
+            result = DbcComparator().compare_folders(old_folder, new_folder)
+
+        self.assertEqual(result.summary()["Messages Renamed"], 0)
+        self.assertEqual(result.summary()["Messages Removed"], 1)
+        self.assertEqual(result.summary()["Messages Added"], 1)
+
+    def test_signal_rename_requires_same_byte_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old_folder = root / "old"
+            new_folder = root / "new"
+            old_folder.mkdir()
+            new_folder.mkdir()
+            (old_folder / "Bus_A.dbc").write_text(OLD_DBC, encoding="utf-8")
+            (new_folder / "Bus_A.dbc").write_text(DIFFERENT_BYTE_ORDER_SIGNAL_DBC, encoding="utf-8")
+
+            result = DbcComparator().compare_folders(old_folder, new_folder)
+
+        self.assertEqual(result.summary()["Messages Renamed"], 0)
+        self.assertEqual(result.summary()["Signals Renamed"], 0)
+        self.assertEqual(result.summary()["Signals Removed"], 2)
         self.assertEqual(result.summary()["Signals Added"], 1)
 
 

@@ -18,7 +18,7 @@ relative paths are paired by CAN ID and message-layout overlap before message an
 
 ## Architecture
 
-- `parser`: Lightweight DBC parser for messages, signals, and selected attributes.
+- `parser`: Cantools-backed DBC parser for messages, signals, multiplexing metadata, extended IDs, and selected attributes.
 - `comparison`: Folder and database comparison orchestration.
 - `rename`: Pluggable rename detector interfaces and structural detectors.
 - `report`: Excel report generation.

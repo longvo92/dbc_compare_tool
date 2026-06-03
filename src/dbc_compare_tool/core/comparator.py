@@ -33,8 +33,8 @@ class DbcComparator:
         message_rename_detector: MessageRenameDetector | None = None,
         signal_rename_detector: SignalRenameDetector | None = None,
     ) -> None:
-        self.message_rename_detector = message_rename_detector or MessageRenameDetector()
-        self.signal_rename_detector = signal_rename_detector or SignalRenameDetector()
+        self.message_rename_detector = message_rename_detector
+        self.signal_rename_detector = signal_rename_detector
 
     def compare_folders(self, old_folder: Path, new_folder: Path) -> ComparisonResult:
         result = ComparisonResult()
@@ -91,58 +91,56 @@ class DbcComparator:
     ) -> ComparisonResult:
         result = result or ComparisonResult()
 
-        common_names = sorted(set(old_db.messages) & set(new_db.messages))
-        for name in common_names:
-            old_message = old_db.messages[name]
-            new_message = new_db.messages[name]
-            description = _changed_properties(old_message.comparable_properties(), new_message.comparable_properties())
-            if description:
+        old_by_id = _messages_by_frame_id(old_db)
+        new_by_id = _messages_by_frame_id(new_db)
+
+        for frame_id in sorted(set(old_by_id) & set(new_by_id)):
+            old_message = old_by_id[frame_id]
+            new_message = new_by_id[frame_id]
+            if old_message.name != new_message.name:
                 result.message_changes.append(
                     Change(
                         dbc_file=dbc_file,
-                        change_type="Modified",
-                        old_name=name,
-                        new_name=name,
-                        confidence=None,
-                        description=description,
+                        change_type="Renamed",
+                        old_name=old_message.name,
+                        new_name=new_message.name,
+                        confidence=1.0,
+                        description="CAN ID matched",
                         can_id=new_message.can_id,
                     )
                 )
+            else:
+                description = _changed_properties(
+                    old_message.comparable_properties(),
+                    new_message.comparable_properties(),
+                )
+                if description:
+                    result.message_changes.append(
+                        Change(
+                            dbc_file=dbc_file,
+                            change_type="Modified",
+                            old_name=old_message.name,
+                            new_name=new_message.name,
+                            confidence=None,
+                            description=description,
+                            can_id=new_message.can_id,
+                        )
+                    )
             self._compare_signals(dbc_file, old_message, new_message, result)
 
-        unmatched_old = [message for name, message in old_db.messages.items() if name not in new_db.messages]
-        unmatched_new = [message for name, message in new_db.messages.items() if name not in old_db.messages]
-
-        rename_matches = self.message_rename_detector.match(unmatched_old, unmatched_new)
-        renamed_old = {id(match.old) for match in rename_matches}
-        renamed_new = {id(match.new) for match in rename_matches}
-        for match in rename_matches:
+        for frame_id in sorted(set(old_by_id) - set(new_by_id)):
+            message = old_by_id[frame_id]
             result.message_changes.append(
-                Change(
-                    dbc_file=dbc_file,
-                    change_type="Renamed",
-                    old_name=match.old.name,
-                    new_name=match.new.name,
-                    confidence=match.confidence,
-                    description="; ".join(match.reasons),
-                    can_id=match.new.can_id,
-                )
+                Change(dbc_file, "Removed", message.name, "", None, "Message removed", message.can_id)
             )
-            self._compare_signals(dbc_file, match.old, match.new, result)
+            self._append_all_signals(dbc_file, message, "Removed", result)
 
-        for message in unmatched_old:
-            if id(message) not in renamed_old:
-                result.message_changes.append(
-                    Change(dbc_file, "Removed", message.name, "", None, "Message removed", message.can_id)
-                )
-                self._append_all_signals(dbc_file, message, "Removed", result)
-
-        for message in unmatched_new:
-            if id(message) not in renamed_new:
-                result.message_changes.append(
-                    Change(dbc_file, "Added", "", message.name, None, "Message added", message.can_id)
-                )
-                self._append_all_signals(dbc_file, message, "Added", result)
+        for frame_id in sorted(set(new_by_id) - set(old_by_id)):
+            message = new_by_id[frame_id]
+            result.message_changes.append(
+                Change(dbc_file, "Added", "", message.name, None, "Message added", message.can_id)
+            )
+            self._append_all_signals(dbc_file, message, "Added", result)
 
         return result
 
@@ -153,8 +151,11 @@ class DbcComparator:
         new_message: Message,
         result: ComparisonResult,
     ) -> None:
-        common_names = sorted(set(old_message.signals) & set(new_message.signals))
         parent_name = new_message.name
+        common_names = sorted(set(old_message.signals) & set(new_message.signals))
+        matched_old = set(common_names)
+        matched_new = set(common_names)
+
         for name in common_names:
             old_signal = old_message.signals[name]
             new_signal = new_message.signals[name]
@@ -164,35 +165,48 @@ class DbcComparator:
                     Change(dbc_file, "Modified", name, name, None, description, parent_message=parent_name)
                 )
 
-        unmatched_old = [signal for name, signal in old_message.signals.items() if name not in new_message.signals]
-        unmatched_new = [signal for name, signal in new_message.signals.items() if name not in old_message.signals]
+        unmatched_old = [signal for name, signal in old_message.signals.items() if name not in matched_old]
+        unmatched_new = [signal for name, signal in new_message.signals.items() if name not in matched_new]
 
-        rename_matches = self.signal_rename_detector.match(unmatched_old, unmatched_new)
-        renamed_old = {id(match.old) for match in rename_matches}
-        renamed_new = {id(match.new) for match in rename_matches}
-        for match in rename_matches:
+        for old_signal, new_signal in _match_renamed_signals(unmatched_old, unmatched_new):
             result.signal_changes.append(
                 Change(
                     dbc_file=dbc_file,
                     parent_message=parent_name,
                     change_type="Renamed",
-                    old_name=match.old.name,
-                    new_name=match.new.name,
-                    confidence=match.confidence,
-                    description="; ".join(match.reasons),
+                    old_name=old_signal.name,
+                    new_name=new_signal.name,
+                    confidence=1.0,
+                    description="Start bit, length, and byte order matched",
                 )
             )
+            matched_old.add(old_signal.name)
+            matched_new.add(new_signal.name)
 
-        for signal in unmatched_old:
-            if id(signal) not in renamed_old:
-                result.signal_changes.append(
-                    Change(dbc_file, "Removed", signal.name, "", None, "Signal removed", parent_message=parent_name)
-                )
-        for signal in unmatched_new:
-            if id(signal) not in renamed_new:
-                result.signal_changes.append(
-                    Change(dbc_file, "Added", "", signal.name, None, "Signal added", parent_message=parent_name)
-                )
+        new_signal_keys = {signal.signal_key() for signal in new_message.signals.values()}
+        old_signal_keys = {signal.signal_key() for signal in old_message.signals.values()}
+
+        for name, signal in old_message.signals.items():
+            if name in matched_old:
+                continue
+            if signal.signal_key() not in new_signal_keys:
+                description = "Signal removed"
+            else:
+                description = "Signal removed after layout/name change"
+            result.signal_changes.append(
+                Change(dbc_file, "Removed", signal.name, "", None, description, parent_message=parent_name)
+            )
+
+        for name, signal in new_message.signals.items():
+            if name in matched_new:
+                continue
+            if signal.signal_key() not in old_signal_keys:
+                description = "Signal added"
+            else:
+                description = "Signal added after layout/name change"
+            result.signal_changes.append(
+                Change(dbc_file, "Added", "", signal.name, None, description, parent_message=parent_name)
+            )
 
     def _append_all_signals(self, dbc_file: str, message: Message, change_type: str, result: ComparisonResult) -> None:
         for signal in message.signals.values():
@@ -217,6 +231,36 @@ def _changed_properties(old: dict[str, object], new: dict[str, object]) -> str:
         if old_value != new_value:
             changes.append(f"{key} changed from {old_value!r} to {new_value!r}")
     return "; ".join(changes)
+
+
+def _messages_by_frame_id(database: DbcDatabase) -> dict[int, Message]:
+    return {message.can_id: message for message in database.messages.values()}
+
+
+def _match_renamed_signals(old_signals: list[Signal], new_signals: list[Signal]) -> list[tuple[Signal, Signal]]:
+    candidates: list[tuple[Signal, Signal]] = []
+    used_old: set[int] = set()
+    used_new: set[int] = set()
+
+    for old_signal in old_signals:
+        for new_signal in new_signals:
+            if old_signal.name == new_signal.name:
+                continue
+            if old_signal.layout_key() != new_signal.layout_key():
+                continue
+            candidates.append((old_signal, new_signal))
+
+    candidates.sort(key=lambda item: (item[0].start_bit, item[0].length, item[0].byte_order, item[0].name, item[1].name))
+    matches: list[tuple[Signal, Signal]] = []
+    for old_signal, new_signal in candidates:
+        old_id = id(old_signal)
+        new_id = id(new_signal)
+        if old_id in used_old or new_id in used_new:
+            continue
+        matches.append((old_signal, new_signal))
+        used_old.add(old_id)
+        used_new.add(new_id)
+    return matches
 
 
 def _match_renamed_databases(
