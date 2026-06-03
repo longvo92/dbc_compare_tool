@@ -4,9 +4,12 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
@@ -16,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
+    QTextBrowser,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -23,6 +27,24 @@ from PySide6.QtWidgets import (
 
 from dbc_compare_tool.core.comparator import DbcComparator
 from dbc_compare_tool.report.excel import write_excel_report
+
+
+APP_AUTHOR = "LongVT23"
+
+
+def _resource_path(filename: str) -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "resources" / filename
+    return Path(__file__).resolve().parents[3] / "resources" / filename
+
+
+def _app_icon() -> QIcon:
+    icon_path = _resource_path("vinfast.jpg")
+    return QIcon(str(icon_path))
+
+
+def _read_resource_text(filename: str) -> str:
+    return _resource_path(filename).read_text(encoding="utf-8")
 
 
 class CompareWorker(QThread):
@@ -51,6 +73,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("DBC Compare Tool")
+        self.setWindowIcon(_app_icon())
         self.resize(840, 560)
         self.worker: CompareWorker | None = None
         self.last_report: Path | None = None
@@ -63,12 +86,49 @@ class MainWindow(QMainWindow):
         self.progress = QProgressBar()
         self.log_view = QTextEdit()
 
+        self._build_menu()
         self._build_layout()
         self._wire_events()
+
+    def _build_menu(self) -> None:
+        help_menu = self.menuBar().addMenu("Help")
+        user_guide_action = help_menu.addAction("User Guide")
+        release_notes_action = help_menu.addAction("Release Notes")
+        about_action = help_menu.addAction("About")
+        user_guide_action.triggered.connect(
+            lambda: self._show_help_document("User Guide", "help/user_guide.md")
+        )
+        release_notes_action.triggered.connect(
+            lambda: self._show_help_document("Release Notes", "help/release_notes.md")
+        )
+        about_action.triggered.connect(lambda: self._show_help_document("About", "help/about.md"))
 
     def _build_layout(self) -> None:
         central = QWidget()
         root = QVBoxLayout(central)
+        brand_row = QHBoxLayout()
+        logo = QLabel()
+        logo_pixmap = QPixmap(str(_resource_path("vinfast.jpg")))
+        if not logo_pixmap.isNull():
+            logo.setPixmap(
+                logo_pixmap.scaledToHeight(
+                    44,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        logo.setFixedHeight(52)
+        logo.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        title = QLabel("DBC Compare Tool")
+        title.setStyleSheet("font-size: 18px; font-weight: 600;")
+        author = QLabel(f"Author: {APP_AUTHOR}")
+        author.setStyleSheet("color: #555555;")
+        title_column = QVBoxLayout()
+        title_column.addWidget(title)
+        title_column.addWidget(author)
+        brand_row.addWidget(logo)
+        brand_row.addSpacing(10)
+        brand_row.addLayout(title_column)
+        brand_row.addStretch()
         form = QGridLayout()
 
         form.addWidget(QLabel("Old Baseline Folder"), 0, 0)
@@ -99,6 +159,7 @@ class MainWindow(QMainWindow):
         self.log_view.setReadOnly(True)
         self.open_button.setEnabled(False)
 
+        root.addLayout(brand_row)
         root.addLayout(form)
         root.addLayout(buttons)
         root.addWidget(self.progress)
@@ -164,12 +225,34 @@ class MainWindow(QMainWindow):
         if self.last_report and self.last_report.exists():
             os.startfile(self.last_report)
 
+    def _show_help_document(self, title: str, filename: str) -> None:
+        try:
+            content = _read_resource_text(filename)
+        except OSError as exc:
+            QMessageBox.critical(self, title, f"Unable to open help file: {exc}")
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setWindowIcon(_app_icon())
+        dialog.resize(720, 560)
+        layout = QVBoxLayout(dialog)
+        viewer = QTextBrowser()
+        viewer.setOpenExternalLinks(True)
+        viewer.setMarkdown(content)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(viewer)
+        layout.addWidget(buttons)
+        dialog.exec()
+
     def _log(self, message: str) -> None:
         self.log_view.append(message)
 
 
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setWindowIcon(_app_icon())
     window = MainWindow()
     window.show()
     return app.exec()

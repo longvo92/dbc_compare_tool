@@ -39,8 +39,21 @@ class ExcelReportTests(unittest.TestCase):
         self.assertEqual(summary_rows["Messages Renamed"], 1)
         self.assertEqual(summary_rows["Signals Renamed"], 1)
         self.assertEqual(summary_rows["Total Changes"], 2)
+        signal_headers = [cell.value for cell in workbook["Signal Details"][1]]
+        self.assertEqual(
+            signal_headers,
+            [
+                "DBC File",
+                "Parent Message",
+                "Change Type",
+                "Old Signal Name",
+                "New Signal Name",
+                "Confidence Score",
+                "Changed Properties",
+            ],
+        )
+        self.assertTrue(workbook["Signal Details"]["G2"].alignment.wrap_text)
 
 
 if __name__ == "__main__":
     unittest.main()
-

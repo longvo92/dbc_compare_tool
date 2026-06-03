@@ -11,6 +11,33 @@ from dbc_compare_tool.core.parser import parse_dbc
 from dbc_compare_tool.core.rename import MessageRenameDetector, SignalRenameDetector
 
 FILE_RENAME_THRESHOLD = 0.55
+LAYOUT_PROPERTIES = ("Start Bit", "Length", "Byte Order")
+PROPERTY_ORDER = (
+    "Start Bit",
+    "Length",
+    "Byte Order",
+    "Minimum",
+    "Maximum",
+    "Factor",
+    "Offset",
+    "Unit",
+    "Value Type",
+    "Signed",
+    "Receivers",
+    "Multiplexer",
+    "Multiplexer IDs",
+    "Multiplexer Signal",
+    "CAN ID",
+    "DLC",
+    "Transmitter",
+    "Extended Frame",
+    "Cycle Time",
+    "Signal Count",
+)
+PROPERTY_LABELS = {
+    "Minimum": "Min",
+    "Maximum": "Max",
+}
 
 
 @dataclass(frozen=True)
@@ -105,7 +132,14 @@ class DbcComparator:
                         old_name=old_message.name,
                         new_name=new_message.name,
                         confidence=1.0,
-                        description="CAN ID matched",
+                        description=_renamed_item_description(
+                            "Message Name",
+                            old_message.name,
+                            new_message.name,
+                            old_message.comparable_properties(),
+                            new_message.comparable_properties(),
+                            "CAN ID matched",
+                        ),
                         can_id=new_message.can_id,
                     )
                 )
@@ -177,7 +211,14 @@ class DbcComparator:
                     old_name=old_signal.name,
                     new_name=new_signal.name,
                     confidence=1.0,
-                    description="Start bit, length, and byte order matched",
+                    description=_renamed_item_description(
+                        "Signal Name",
+                        old_signal.name,
+                        new_signal.name,
+                        old_signal.comparable_properties(),
+                        new_signal.comparable_properties(),
+                        "Start bit, length, and byte order matched",
+                    ),
                 )
             )
             matched_old.add(old_signal.name)
@@ -224,13 +265,68 @@ class DbcComparator:
 
 
 def _changed_properties(old: dict[str, object], new: dict[str, object]) -> str:
+    changed_keys = {key for key in set(old) | set(new) if old.get(key) != new.get(key)}
+    if not changed_keys:
+        return ""
+
     changes: list[str] = []
-    for key in sorted(set(old) | set(new)):
-        old_value = old.get(key)
-        new_value = new.get(key)
-        if old_value != new_value:
-            changes.append(f"{key} changed from {old_value!r} to {new_value!r}")
-    return "; ".join(changes)
+    layout_keys = [key for key in LAYOUT_PROPERTIES if key in changed_keys]
+    if layout_keys:
+        changes.append(f"Layout changed: {_format_change_segments(layout_keys, old, new)}")
+
+    for key in _ordered_changed_keys(changed_keys - set(LAYOUT_PROPERTIES)):
+        changes.append(_format_change_segment(key, old.get(key), new.get(key)))
+    return "\n".join(changes)
+
+
+def _renamed_item_description(
+    name_label: str,
+    old_name: str,
+    new_name: str,
+    old_properties: dict[str, object],
+    new_properties: dict[str, object],
+    evidence: str,
+) -> str:
+    lines = [
+        f"{name_label}: {old_name} -> {new_name}",
+        f"Rename evidence: {evidence}",
+    ]
+    changed_properties = _changed_properties(old_properties, new_properties)
+    if changed_properties:
+        lines.append(changed_properties)
+    return "\n".join(lines)
+
+
+def _ordered_changed_keys(keys: set[str]) -> list[str]:
+    ordered = [key for key in PROPERTY_ORDER if key in keys]
+    ordered.extend(sorted(keys - set(PROPERTY_ORDER)))
+    return ordered
+
+
+def _format_change_segments(keys: list[str], old: dict[str, object], new: dict[str, object]) -> str:
+    return ", ".join(_format_change_segment(key, old.get(key), new.get(key)) for key in keys)
+
+
+def _format_change_segment(key: str, old_value: object, new_value: object) -> str:
+    label = PROPERTY_LABELS.get(key, key)
+    return f"{label}: {_format_property_value(key, old_value)} -> {_format_property_value(key, new_value)}"
+
+
+def _format_property_value(key: str, value: object) -> str:
+    if value is None:
+        return "blank"
+    if key == "Byte Order":
+        if value == 1:
+            return "Intel/little-endian (1)"
+        if value == 0:
+            return "Motorola/big-endian (0)"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, float):
+        return f"{value:g}"
+    if isinstance(value, tuple):
+        return ", ".join(str(item) for item in value) if value else "blank"
+    return str(value)
 
 
 def _messages_by_frame_id(database: DbcDatabase) -> dict[int, Message]:

@@ -1,12 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+
 block_cipher = None
+PROJECT_ROOT = Path(SPECPATH).parent
+RESOURCE_DIR = PROJECT_ROOT / "resources"
 
 a = Analysis(
-    ["../src/dbc_compare_tool/__main__.py"],
-    pathex=["..", "../src"],
+    [str(PROJECT_ROOT / "src" / "dbc_compare_tool" / "__main__.py")],
+    pathex=[str(PROJECT_ROOT), str(PROJECT_ROOT / "src")],
     binaries=[],
-    datas=[],
+    datas=[
+        (str(RESOURCE_DIR / "vinfast.jpg"), "resources"),
+        (str(RESOURCE_DIR / "help" / "user_guide.md"), "resources/help"),
+        (str(RESOURCE_DIR / "help" / "release_notes.md"), "resources/help"),
+        (str(RESOURCE_DIR / "help" / "about.md"), "resources/help"),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -29,6 +39,8 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon=str(RESOURCE_DIR / "vinfast.ico"),
+    version=str(RESOURCE_DIR / "version_info.txt"),
 )
 coll = COLLECT(
     exe,
@@ -40,4 +52,3 @@ coll = COLLECT(
     upx_exclude=[],
     name="DBCCompareTool",
 )
-

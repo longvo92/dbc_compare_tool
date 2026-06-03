@@ -22,6 +22,20 @@ BO_ 100 Body_Status: 8 BCM
 BA_ "GenMsgCycleTime" BO_ 100 10;
 """
 
+RENAMED_AND_MIN_MAX_CHANGED_DBC = """VERSION ""
+BO_ 100 Body_Status: 8 BCM
+ SG_ VehSpd : 0|16@1+ (0.01,0) [7|260] "km/h" ECM,IC
+ SG_ IgnitionState : 16|2@1+ (1,0) [0|3] "" ECM
+BA_ "GenMsgCycleTime" BO_ 100 10;
+"""
+
+RENAMED_AND_DLC_CHANGED_DBC = """VERSION ""
+BO_ 100 Body_Status: 6 BCM
+ SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|250] "km/h" ECM,IC
+ SG_ IgnitionState : 16|2@1+ (1,0) [0|3] "" ECM
+BA_ "GenMsgCycleTime" BO_ 100 10;
+"""
+
 NAMESPACE_AND_ENV_DBC = """VERSION ""
 NS_ :
     SG_
@@ -55,6 +69,13 @@ BO_ 101 BCM_Status: 8 BCM
 DIFFERENT_BYTE_ORDER_SIGNAL_DBC = """VERSION ""
 BO_ 100 BCM_Status: 8 BCM
  SG_ VehSpd : 0|16@0+ (0.01,0) [0|250] "km/h" ECM,IC
+"""
+
+DETAILED_MODIFIED_SIGNAL_DBC = """VERSION ""
+BO_ 100 BCM_Status: 8 BCM
+ SG_ VehicleSpeed : 8|8@0+ (0.02,1) [7|260] "mph" ECM,IC
+ SG_ IgnitionState : 16|2@1+ (1,0) [0|3] "" ECM
+BA_ "GenMsgCycleTime" BO_ 100 10;
 """
 
 
@@ -115,6 +136,47 @@ class ParserAndComparatorTests(unittest.TestCase):
         self.assertEqual(result.summary()["Signals Renamed"], 1)
         self.assertEqual(result.summary()["Messages Removed"], 0)
         self.assertEqual(result.summary()["Messages Added"], 0)
+
+    def test_signal_rename_description_also_shows_changed_properties(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old_folder = root / "old"
+            new_folder = root / "new"
+            old_folder.mkdir()
+            new_folder.mkdir()
+            (old_folder / "Bus_A.dbc").write_text(OLD_DBC, encoding="utf-8")
+            (new_folder / "Bus_A.dbc").write_text(RENAMED_AND_MIN_MAX_CHANGED_DBC, encoding="utf-8")
+
+            result = DbcComparator().compare_folders(old_folder, new_folder)
+
+        renamed_signal = next(change for change in result.signal_changes if change.change_type == "Renamed")
+        self.assertEqual(renamed_signal.old_name, "VehicleSpeed")
+        self.assertEqual(renamed_signal.new_name, "VehSpd")
+        self.assertIn("Signal Name: VehicleSpeed -> VehSpd", renamed_signal.description)
+        self.assertIn("Min: 0 -> 7", renamed_signal.description)
+        self.assertIn("Max: 250 -> 260", renamed_signal.description)
+        self.assertEqual(result.summary()["Signals Renamed"], 1)
+        self.assertEqual(result.summary()["Signals Removed"], 0)
+        self.assertEqual(result.summary()["Signals Added"], 0)
+
+    def test_message_rename_description_also_shows_changed_properties(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old_folder = root / "old"
+            new_folder = root / "new"
+            old_folder.mkdir()
+            new_folder.mkdir()
+            (old_folder / "Bus_A.dbc").write_text(OLD_DBC, encoding="utf-8")
+            (new_folder / "Bus_A.dbc").write_text(RENAMED_AND_DLC_CHANGED_DBC, encoding="utf-8")
+
+            result = DbcComparator().compare_folders(old_folder, new_folder)
+
+        renamed_message = next(change for change in result.message_changes if change.change_type == "Renamed")
+        self.assertEqual(renamed_message.old_name, "BCM_Status")
+        self.assertEqual(renamed_message.new_name, "Body_Status")
+        self.assertIn("Message Name: BCM_Status -> Body_Status", renamed_message.description)
+        self.assertIn("DLC: 8 -> 6", renamed_message.description)
+        self.assertEqual(result.summary()["Messages Renamed"], 1)
 
     def test_detects_renames_when_dbc_file_is_renamed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -182,6 +244,31 @@ class ParserAndComparatorTests(unittest.TestCase):
         self.assertEqual(result.summary()["Signals Renamed"], 0)
         self.assertEqual(result.summary()["Signals Removed"], 2)
         self.assertEqual(result.summary()["Signals Added"], 1)
+
+    def test_modified_signal_description_shows_detailed_old_to_new_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old_folder = root / "old"
+            new_folder = root / "new"
+            old_folder.mkdir()
+            new_folder.mkdir()
+            (old_folder / "Bus_A.dbc").write_text(OLD_DBC, encoding="utf-8")
+            (new_folder / "Bus_A.dbc").write_text(DETAILED_MODIFIED_SIGNAL_DBC, encoding="utf-8")
+
+            result = DbcComparator().compare_folders(old_folder, new_folder)
+
+        self.assertEqual(result.summary()["Signals Modified"], 1)
+        description = result.signal_changes[0].description
+        self.assertIn(
+            "Layout changed: Start Bit: 0 -> 8, Length: 16 -> 8, "
+            "Byte Order: Intel/little-endian (1) -> Motorola/big-endian (0)",
+            description,
+        )
+        self.assertIn("Min: 0 -> 7", description)
+        self.assertIn("Max: 250 -> 260", description)
+        self.assertIn("Factor: 0.01 -> 0.02", description)
+        self.assertIn("Offset: 0 -> 1", description)
+        self.assertIn("Unit: km/h -> mph", description)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from dbc_compare_tool.core.models import Change, ComparisonResult
@@ -100,6 +100,9 @@ def _format_sheet(sheet) -> None:
         cell.font = header_font
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
+    for row in sheet.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
 
     for column_cells in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column_cells)
@@ -109,4 +112,3 @@ def _format_sheet(sheet) -> None:
 
 def _format_confidence(confidence: float | None) -> str:
     return "" if confidence is None else f"{confidence:.2f}"
-
