@@ -69,6 +69,5 @@ jobs:
         name: DBC Compare Tool ${{ github.ref_name }}
         files: |
           DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip
-        generate_release_notes: true
       env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
