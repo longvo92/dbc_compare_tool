@@ -39,7 +39,7 @@ jobs:
     - name: Run tests
       run: |
         pip install pytest pytest-cov
-        pytest tests/ -v --cov=src/dbc_compare_tool --cov-report=term-plus
+        pytest tests/ -v --cov=src/dbc_compare_tool
 
     - name: Build executable
       run: |
