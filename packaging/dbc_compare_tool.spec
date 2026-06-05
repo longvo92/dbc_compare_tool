@@ -12,7 +12,7 @@ a = Analysis(
     pathex=[str(PROJECT_ROOT), str(PROJECT_ROOT / "src")],
     binaries=[],
     datas=[
-        (str(RESOURCE_DIR / "vinfast.jpg"), "resources"),
+        (str(RESOURCE_DIR / "vinfast_logo.png"), "resources"),
         (str(RESOURCE_DIR / "help" / "user_guide.md"), "resources/help"),
         (str(RESOURCE_DIR / "help" / "release_notes.md"), "resources/help"),
         (str(RESOURCE_DIR / "help" / "about.md"), "resources/help"),
@@ -39,7 +39,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    icon=str(RESOURCE_DIR / "vinfast.ico"),
+    icon=str(RESOURCE_DIR / "VinFast_logo.ico"),
     version=str(RESOURCE_DIR / "version_info.txt"),
 )
 coll = COLLECT(

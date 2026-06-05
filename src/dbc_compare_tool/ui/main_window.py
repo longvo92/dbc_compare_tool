@@ -39,7 +39,7 @@ def _resource_path(filename: str) -> Path:
 
 
 def _app_icon() -> QIcon:
-    icon_path = _resource_path("vinfast.jpg")
+    icon_path = _resource_path("vinfast_logo.png")
     return QIcon(str(icon_path))
 
 
