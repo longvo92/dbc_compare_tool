@@ -29,9 +29,6 @@ from dbc_compare_tool.core.comparator import DbcComparator
 from dbc_compare_tool.report.excel import write_excel_report
 
 
-APP_AUTHOR = "LongVT23"
-
-
 def _resource_path(filename: str) -> Path:
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "resources" / filename
@@ -120,11 +117,8 @@ class MainWindow(QMainWindow):
         logo.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         title = QLabel("DBC Compare Tool")
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
-        author = QLabel(f"Author: {APP_AUTHOR}")
-        author.setStyleSheet("color: #555555;")
         title_column = QVBoxLayout()
         title_column.addWidget(title)
-        title_column.addWidget(author)
         brand_row.addWidget(logo)
         brand_row.addSpacing(10)
         brand_row.addLayout(title_column)
