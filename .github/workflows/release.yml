@@ -13,10 +13,6 @@ on:
 permissions:
   contents: write
 
-env:
-  ACTIONS_STEP_DEBUG: true
-
-
 
 jobs:
   release:
@@ -31,48 +27,8 @@ jobs:
       with:
         python-version: '3.11'
         cache: 'pip'
-    - name: Show authenticated user
-      shell: pwsh
-      run: |
-        $headers = @{
-          Authorization = "Bearer ${{ secrets.RELEASE_REPO_TOKEN }}"
-        }
+
     
-        Invoke-RestMethod `
-          -Uri "https://api.github.com/user" `
-          -Headers $headers
-    - name: Check release permission
-      shell: pwsh
-      run: |
-        $headers = @{
-          Authorization = "Bearer ${{ secrets.RELEASE_REPO_TOKEN }}"
-          Accept = "application/vnd.github+json"
-        }
-    
-        $body = @{
-          tag_name = "test-tag"
-          name = "Test Release"
-          draft = $true
-        } | ConvertTo-Json
-    
-        try {
-          Invoke-RestMethod `
-            -Method POST `
-            -Uri "https://api.github.com/repos/longvo92/dbc_compare_released/releases" `
-            -Headers $headers `
-            -Body $body `
-            -ContentType "application/json"
-        }
-        catch {
-          Write-Host $_.Exception.Response.StatusCode
-    
-          $reader = New-Object System.IO.StreamReader(
-            $_.Exception.Response.GetResponseStream()
-          )
-    
-          $reader.ReadToEnd()
-          throw
-        }
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -100,25 +56,93 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path release
 
-        if (Test-Path "dist\DBCCompareTool.exe") {
-            Copy-Item "dist\DBCCompareTool.exe" "release\"
-        }
-        elseif (Test-Path "dist\DBCCompareTool") {
-            Copy-Item "dist\DBCCompareTool" "release\" -Recurse
+        if (Test-Path "dist\DBCCompareTool") {
+            Copy-Item "dist\DBCCompareTool\*" "release\" -Recurse
         }
         else {
-            Write-Error "Build output not found"
+            Write-Error "Build output not found in dist\DBCCompareTool"
             exit 1
         }
 
         Compress-Archive `
           -Path release\* `
           -DestinationPath DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip
-    - name: Create release in public repo
-      uses: softprops/action-gh-release@v2
+
+    #################################################################
+    # CHECKOUT DOWNLOAD REPO
+    #################################################################
+
+    - name: Checkout download repo
+      uses: actions/checkout@v4
       with:
-        repository: longvo92/dbc_compare_released
-        tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-        name: DBC Compare Tool ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+        repository: longvo92/dbc_compare_downloads
+        token: ${{ secrets.RELEASE_REPO_TOKEN }}
+        path: download_repo
+
+    #################################################################
+    # UPDATE FILES
+    #################################################################
+
+    - name: Update latest package
+      shell: pwsh
+      run: |
+        Copy-Item `
+          "DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip" `
+          "download_repo/latest.zip" `
+          -Force
+
+    - name: Generate version.json
+      shell: pwsh
+      run: |
+        @"
+        {
+          "version": "${{ steps.version.outputs.VERSION }}"
+        }
+        "@ | Out-File `
+          "download_repo/version.json" `
+          -Encoding utf8
+
+    - name: Update release notes
+      shell: pwsh
+      run: |
+        if (Test-Path "RELEASE_NOTES.md")
+        {
+          Copy-Item `
+            "RELEASE_NOTES.md" `
+            "download_repo/release_notes.md" `
+            -Force
+        }
+        else
+        {
+          "No release notes available" |
+            Out-File "download_repo/release_notes.md"
+        }
+
+    #################################################################
+    # COMMIT + PUSH
+    #################################################################
+
+    - name: Push download files
+      shell: pwsh
+      run: |
+        cd download_repo
+
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+
+        git add .
+
+        git diff --cached --quiet
+
+        if ($LASTEXITCODE -ne 0)
+        {
+          git commit `
+            -m "Release ${{ steps.version.outputs.VERSION }}"
+
+          git push
+        }
+        else
+        {
+          Write-Host "No changes to commit"
+        }
+
