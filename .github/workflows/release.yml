@@ -13,6 +13,8 @@ permissions:
 env:
   ACTIONS_STEP_DEBUG: true
 
+
+
 jobs:
   release:
     runs-on: windows-latest
@@ -26,7 +28,14 @@ jobs:
       with:
         python-version: '3.11'
         cache: 'pip'
-
+    - name: Check PAT exists
+      run: |
+        if [ -z "${{ secrets.PUBLIC_REPO_PAT }}" ]; then
+          echo "PAT is EMPTY"
+          exit 1
+        else
+          echo "PAT is PRESENT"
+        fi
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -68,9 +77,9 @@ jobs:
         Compress-Archive `
           -Path release\* `
           -DestinationPath DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip
-
     - name: Create release in public repo
       uses: softprops/action-gh-release@v2
+      
       with:
         repository: longvo92/dbc_compare_released
         tag_name: ${{ github.ref_name }}
