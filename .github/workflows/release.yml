@@ -120,7 +120,5 @@ jobs:
         repository: longvo92/dbc_compare_released
         tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
         name: DBC Compare Tool ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-        files: |
-          DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip
       env:
         GITHUB_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
