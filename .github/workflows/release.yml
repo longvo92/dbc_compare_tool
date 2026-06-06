@@ -75,7 +75,7 @@ jobs:
     - name: Checkout download repo
       uses: actions/checkout@v4
       with:
-        repository: longvo92/dbc_compare_downloads
+        repository: longvo92/dbc_compare_released
         token: ${{ secrets.RELEASE_REPO_TOKEN }}
         path: download_repo
 
