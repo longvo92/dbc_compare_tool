@@ -28,14 +28,32 @@ jobs:
       with:
         python-version: '3.11'
         cache: 'pip'
-    - name: Check PAT exists
+    - name: Show authenticated user
+      shell: pwsh
       run: |
-        if [ -z "${{ secrets.PUBLIC_REPO_PAT }}" ]; then
-          echo "PAT is EMPTY"
-          exit 1
-        else
-          echo "PAT is PRESENT"
-        fi
+        $headers = @{
+          Authorization = "Bearer ${{ secrets.RELEASE_REPO_TOKEN }}"
+        }
+    
+        Invoke-RestMethod `
+          -Uri "https://api.github.com/user" `
+          -Headers $headers
+        - name: Debug context
+          shell: pwsh
+          run: |
+            echo "event=${{ github.event_name }}"
+            echo "ref=${{ github.ref }}"
+            echo "ref_name=${{ github.ref_name }}"
+            - name: Check PAT exists
+              shell: pwsh
+              run: |
+                if ([string]::IsNullOrWhiteSpace("${{ secrets.RELEASE_REPO_TOKEN }}")) {
+                  Write-Error "PAT is EMPTY"
+                  exit 1
+                }
+                else {
+                  Write-Host "PAT is PRESENT"
+                }
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
