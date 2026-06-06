@@ -12,8 +12,6 @@ on:
           required: true
 permissions:
   contents: write
-
-
 jobs:
   release:
     runs-on: windows-latest
@@ -69,31 +67,30 @@ jobs:
           -DestinationPath DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip
 
     #################################################################
-    # CHECKOUT DOWNLOAD REPO
+    # CHECKOUT RELEASE REPO
     #################################################################
 
-    - name: Checkout download repo
+    - name: Checkout release repo
       uses: actions/checkout@v4
       with:
-        repository: longvo92/dbc_compare_downloads
+        repository: longvo92/dbc_compare_released
         token: ${{ secrets.RELEASE_REPO_TOKEN }}
         path: download_repo
 
     #################################################################
-    # UPDATE FILES
+    # UPDATE DOWNLOAD REPO
     #################################################################
 
-    - name: Update latest package
+    - name: Update download repository files
       shell: pwsh
       run: |
+        # Copy versioned package
         Copy-Item `
           "DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip" `
-          "download_repo/latest.zip" `
+          "download_repo/DBCCompareTool-${{ steps.version.outputs.VERSION }}-x64.zip" `
           -Force
 
-    - name: Generate version.json
-      shell: pwsh
-      run: |
+        # Generate version.json
         @"
         {
           "version": "${{ steps.version.outputs.VERSION }}"
@@ -102,18 +99,14 @@ jobs:
           "download_repo/version.json" `
           -Encoding utf8
 
-    - name: Update release notes
-      shell: pwsh
-      run: |
-        if (Test-Path "RELEASE_NOTES.md")
-        {
+        # Update release notes
+        if (Test-Path "resources/help/release_notes.md") {
           Copy-Item `
-            "RELEASE_NOTES.md" `
+            "resources/help/release_notes.md" `
             "download_repo/release_notes.md" `
             -Force
         }
-        else
-        {
+        else {
           "No release notes available" |
             Out-File "download_repo/release_notes.md"
         }
