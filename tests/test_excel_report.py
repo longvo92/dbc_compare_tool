@@ -49,6 +49,7 @@ class ExcelReportTests(unittest.TestCase):
                 "Old Signal Name",
                 "New Signal Name",
                 "Confidence Score",
+                "Confidence Level",
                 "Changed Properties",
             ],
         )
