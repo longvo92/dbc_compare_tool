@@ -1,5 +1,14 @@
 # DBC Compare Tool - Release Notes
+## Version 0.1.2
 
+### Changed
+
+* Improved rename detection by introducing confidence-based classification.
+* Added **Possible Rename** status for cases where rename detection is ambiguous, particularly for Event Matrix messages containing many structurally similar signals.
+* Reduced false-positive rename classifications by applying more conservative matching logic.
+* Simplified report output by removing detailed **Rename Evidence** descriptions.
+* Cleaned and streamlined comparison results for improved readability.
+---
 ## Version 0.1.1
 
 ### Changed
@@ -24,13 +33,6 @@ Draft release.
 - Executable version metadata.
 - Help menu with User Guide, Release Notes, and About pages.
 
-### Known Notes (v0.1.0)
-
-- Review and update this release note before distributing the build.
-- Update version fields in resources/version_info.txt when publishing a new version.
-
+---
 ### Known Limitations
-
-* Signal rename detection may not be fully reliable for Event Matrix messages that contain many boolean event signals with highly similar definitions.
-* When multiple signals have identical technical properties and differ primarily by name, the comparison engine may not be able to determine whether a signal was renamed or replaced, resulting in Add/Remove classifications instead of Rename.
-* This limitation does not affect detection of actual signal property changes.
+- TBD
