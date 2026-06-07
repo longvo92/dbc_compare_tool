@@ -8,7 +8,7 @@ from typing import Any
 from dbc_compare_tool.core.discovery import discover_dbc_pairs
 from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, Message, Signal
 from dbc_compare_tool.core.parser import parse_dbc
-from dbc_compare_tool.core.rename import MessageRenameDetector, SignalRenameDetector
+from dbc_compare_tool.core.rename import EventMessageDetector, MessageRenameDetector, SignalRenameDetector
 
 FILE_RENAME_THRESHOLD = 0.55
 LAYOUT_PROPERTIES = ("Start Bit", "Length", "Byte Order")
@@ -138,7 +138,6 @@ class DbcComparator:
                             new_message.name,
                             old_message.comparable_properties(),
                             new_message.comparable_properties(),
-                            "CAN ID matched",
                         ),
                         can_id=new_message.can_id,
                     )
@@ -202,7 +201,13 @@ class DbcComparator:
         unmatched_old = [signal for name, signal in old_message.signals.items() if name not in matched_old]
         unmatched_new = [signal for name, signal in new_message.signals.items() if name not in matched_new]
 
-        for old_signal, new_signal in _match_renamed_signals(unmatched_old, unmatched_new):
+        # Detect if this is an event-like message and create appropriate detector
+        is_event_like = EventMessageDetector.is_event_like(old_message) or EventMessageDetector.is_event_like(new_message)
+        rename_matches = _match_renamed_signals(unmatched_old, unmatched_new, is_event_like=is_event_like)
+
+        event_warning = EventMessageDetector.get_warning() if is_event_like else ""
+
+        for old_signal, new_signal, confidence, confidence_level in rename_matches:
             result.signal_changes.append(
                 Change(
                     dbc_file=dbc_file,
@@ -210,14 +215,14 @@ class DbcComparator:
                     change_type="Renamed",
                     old_name=old_signal.name,
                     new_name=new_signal.name,
-                    confidence=1.0,
+                    confidence=confidence,
+                    confidence_level=confidence_level,
                     description=_renamed_item_description(
                         "Signal Name",
                         old_signal.name,
                         new_signal.name,
                         old_signal.comparable_properties(),
                         new_signal.comparable_properties(),
-                        "Start bit, length, and byte order matched",
                     ),
                 )
             )
@@ -285,11 +290,9 @@ def _renamed_item_description(
     new_name: str,
     old_properties: dict[str, object],
     new_properties: dict[str, object],
-    evidence: str,
 ) -> str:
     lines = [
         f"{name_label}: {old_name} -> {new_name}",
-        f"Rename evidence: {evidence}",
     ]
     changed_properties = _changed_properties(old_properties, new_properties)
     if changed_properties:
@@ -333,30 +336,17 @@ def _messages_by_frame_id(database: DbcDatabase) -> dict[int, Message]:
     return {message.can_id: message for message in database.messages.values()}
 
 
-def _match_renamed_signals(old_signals: list[Signal], new_signals: list[Signal]) -> list[tuple[Signal, Signal]]:
-    candidates: list[tuple[Signal, Signal]] = []
-    used_old: set[int] = set()
-    used_new: set[int] = set()
-
-    for old_signal in old_signals:
-        for new_signal in new_signals:
-            if old_signal.name == new_signal.name:
-                continue
-            if old_signal.layout_key() != new_signal.layout_key():
-                continue
-            candidates.append((old_signal, new_signal))
-
-    candidates.sort(key=lambda item: (item[0].start_bit, item[0].length, item[0].byte_order, item[0].name, item[1].name))
-    matches: list[tuple[Signal, Signal]] = []
-    for old_signal, new_signal in candidates:
-        old_id = id(old_signal)
-        new_id = id(new_signal)
-        if old_id in used_old or new_id in used_new:
-            continue
-        matches.append((old_signal, new_signal))
-        used_old.add(old_id)
-        used_new.add(new_id)
-    return matches
+def _match_renamed_signals(
+    old_signals: list[Signal], new_signals: list[Signal], is_event_like: bool = False
+) -> list[tuple[Signal, Signal, float, str]]:
+    """
+    Match renamed signals using confidence-aware detection.
+    
+    Returns list of tuples: (old_signal, new_signal, confidence, confidence_level)
+    """
+    detector = SignalRenameDetector(is_event_like=is_event_like)
+    matches = detector.match(old_signals, new_signals)
+    return [(match.old, match.new, match.confidence, match.confidence_level) for match in matches]
 
 
 def _match_renamed_databases(
