@@ -105,7 +105,7 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central)
         brand_row = QHBoxLayout()
         logo = QLabel()
-        logo_pixmap = QPixmap(str(_resource_path("vinfast.jpg")))
+        logo_pixmap = QPixmap(str(_resource_path("vinfast_logo.png")))
         if not logo_pixmap.isNull():
             logo.setPixmap(
                 logo_pixmap.scaledToHeight(
@@ -113,14 +113,40 @@ class MainWindow(QMainWindow):
                     Qt.TransformationMode.SmoothTransformation,
                 )
             )
-        logo.setFixedHeight(52)
-        logo.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        brand_row = QHBoxLayout()
+        brand_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        logo = QLabel()
+        logo.setPixmap(logo_pixmap.scaled(
+            52, 52,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ))
+        logo.setFixedSize(52, 52)
+
         title = QLabel("DBC Compare Tool")
-        title.setStyleSheet("font-size: 18px; font-weight: 600;")
+        title.setStyleSheet("""
+            QLabel {
+                font-size: 22px;
+                font-weight: bold;
+            }
+        """)
+
+        version = QLabel("Version 0.1.2")
+        version.setStyleSheet("""
+            QLabel {
+                color: gray;
+                font-size: 11px;
+            }
+        """)
+
         title_column = QVBoxLayout()
+        title_column.setSpacing(0)
         title_column.addWidget(title)
+        title_column.addWidget(version)
+
         brand_row.addWidget(logo)
-        brand_row.addSpacing(10)
+        brand_row.addSpacing(12)
         brand_row.addLayout(title_column)
         brand_row.addStretch()
         form = QGridLayout()

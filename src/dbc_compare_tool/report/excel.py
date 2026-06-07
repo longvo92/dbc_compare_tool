@@ -56,6 +56,7 @@ def _write_message_details(sheet, changes: list[Change]) -> None:
         "New Message Name",
         "CAN ID",
         "Confidence Score",
+        "Confidence Level",
         "Change Description",
     ])
     for change in changes:
@@ -66,6 +67,7 @@ def _write_message_details(sheet, changes: list[Change]) -> None:
             change.new_name,
             change.can_id if change.can_id is not None else "",
             _format_confidence(change.confidence),
+            change.confidence_level,
             change.description,
         ])
 
@@ -78,6 +80,7 @@ def _write_signal_details(sheet, changes: list[Change]) -> None:
         "Old Signal Name",
         "New Signal Name",
         "Confidence Score",
+        "Confidence Level",
         "Changed Properties",
     ])
     for change in changes:
@@ -88,6 +91,7 @@ def _write_signal_details(sheet, changes: list[Change]) -> None:
             change.old_name,
             change.new_name,
             _format_confidence(change.confidence),
+            change.confidence_level,
             change.description,
         ])
 

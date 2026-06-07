@@ -95,6 +95,7 @@ class Change:
     description: str
     can_id: int | None = None
     parent_message: str = ""
+    confidence_level: str = ""  # "High", "Medium", "Low", or ""
 
 
 @dataclass

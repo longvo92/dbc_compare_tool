@@ -1,33 +1,110 @@
-# DBC Compare Tool - User Guide
+# Main Features
 
-## Purpose
+## Automatic DBC File Matching
 
-DBC Compare Tool compares two DBC baseline folders and generates an Excel report that shows message and signal changes.
+The tool automatically matches DBC files between Baseline and Current folders.
 
-## Quick Start
+Matching is not based solely on file names. If a DBC file is renamed while its content remains substantially unchanged, the tool can still identify it as the same DBC and compare the corresponding files.
 
-1. Open the application.
-2. Select the old baseline folder.
-3. Select the new baseline folder.
-4. Choose the Excel report output path.
-5. Click Run Comparison.
-6. Click Open Report when the comparison is complete.
+Example:
 
-## Excel Report
+Baseline:
 
-The generated workbook contains:
+* BCM.dbc
 
-- Summary: total counts for added, removed, modified, and renamed items.
-- Message Details: message-level changes.
-- Signal Details: signal-level changes.
+Current:
 
-## Change Description
+* BCM_V2.dbc
 
-Changed values are shown as old -> new.
+Result:
 
-Examples:
+* Detected as a renamed DBC file rather than one removed and one added file.
 
-- Signal Name: VehicleSpeed -> VehSpd
-- Layout changed: Start Bit: 0 -> 8, Length: 16 -> 8
-- Min: 0 -> 7
-- Max: 250 -> 260
+---
+
+## Message Rename Detection
+
+The tool can identify message renames even when the message name changes.
+
+Detection is based on:
+
+* CAN ID
+* DLC
+* Signal layout
+* Signal composition
+* Message attributes
+
+Example:
+
+Baseline:
+
+* VehicleStatus
+
+Current:
+
+* Vehicle_Status
+
+Result:
+
+* Classified as Message Rename.
+
+---
+
+## Signal Rename Detection
+
+The tool can identify signal renames by comparing technical characteristics rather than relying solely on signal names.
+
+Detection considers:
+
+* Start Bit
+* Length
+* Byte Order
+* Signedness
+* Scaling (Factor / Offset)
+* Unit
+* Receivers
+* Signal layout within the message
+
+Example:
+
+Baseline:
+
+* VehSpd
+
+Current:
+
+* VehicleSpeed
+
+Result:
+
+* Classified as Signal Rename.
+
+---
+
+## Possible Rename Detection
+
+For messages containing many structurally similar signals (such as Event Matrix messages), rename detection may be ambiguous.
+
+In such cases, the tool reports:
+
+* Possible Rename
+
+instead of:
+
+* Rename
+
+This reduces false-positive rename classifications and improves report reliability.
+
+---
+
+## Excel Report Generation
+
+The tool generates a structured Excel report containing:
+
+* Summary
+* DBC Overview
+* Message Changes
+* Signal Changes
+* Rename Information
+* Possible Rename Information
+* Detailed Modification Tracking
