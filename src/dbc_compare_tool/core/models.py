@@ -96,6 +96,7 @@ class Change:
     can_id: int | None = None
     parent_message: str = ""
     confidence_level: str = ""  # "High", "Medium", "Low", or ""
+    property_diffs: tuple[tuple[str, str, str], ...] = ()  # (property_name, old_value, new_value)
 
 
 @dataclass

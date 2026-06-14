@@ -8,10 +8,12 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -25,7 +27,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dbc_compare_tool import __version__
 from dbc_compare_tool.core.comparator import DbcComparator
+from dbc_compare_tool.core.models import ComparisonResult
 from dbc_compare_tool.report.excel import write_excel_report
 
 
@@ -36,12 +40,43 @@ def _resource_path(filename: str) -> Path:
 
 
 def _app_icon() -> QIcon:
-    icon_path = _resource_path("vinfast_logo.png")
-    return QIcon(str(icon_path))
+    return QIcon(str(_resource_path("vinfast_logo.png")))
 
 
 def _read_resource_text(filename: str) -> str:
     return _resource_path(filename).read_text(encoding="utf-8")
+
+
+def _filter_result(result: ComparisonResult, selected_types: set[str]) -> ComparisonResult:
+    if not selected_types:
+        return result
+    return ComparisonResult(
+        message_changes=[c for c in result.message_changes if c.change_type in selected_types],
+        signal_changes=[c for c in result.signal_changes if c.change_type in selected_types],
+    )
+
+
+class DropLineEdit(QLineEdit):
+    """QLineEdit that accepts folder drag-and-drop."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+        self.setPlaceholderText("Browse or drag & drop a folder here")
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            url = event.mimeData().urls()[0]
+            if Path(url.toLocalFile()).is_dir():
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    def dropEvent(self, event) -> None:
+        path = Path(event.mimeData().urls()[0].toLocalFile())
+        if path.is_dir():
+            self.setText(str(path))
+            event.acceptProposedAction()
 
 
 class CompareWorker(QThread):
@@ -49,16 +84,25 @@ class CompareWorker(QThread):
     completed = Signal(object, object)
     failed = Signal(str)
 
-    def __init__(self, old_folder: Path, new_folder: Path, output_path: Path) -> None:
+    def __init__(
+        self,
+        old_folder: Path,
+        new_folder: Path,
+        output_path: Path,
+        selected_types: set[str] | None = None,
+    ) -> None:
         super().__init__()
         self.old_folder = old_folder
         self.new_folder = new_folder
         self.output_path = output_path
+        self.selected_types: set[str] = selected_types or set()
 
     def run(self) -> None:
         try:
             self.log.emit("Discovering and parsing DBC files...")
             result = DbcComparator().compare_folders(self.old_folder, self.new_folder)
+            if self.selected_types:
+                result = _filter_result(result, self.selected_types)
             self.log.emit("Writing Excel report...")
             write_excel_report(result, self.output_path)
             self.completed.emit(self.output_path, result.summary())
@@ -71,17 +115,25 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("DBC Compare Tool")
         self.setWindowIcon(_app_icon())
-        self.resize(840, 560)
+        self.resize(860, 620)
         self.worker: CompareWorker | None = None
         self.last_report: Path | None = None
 
-        self.old_input = QLineEdit()
-        self.new_input = QLineEdit()
+        self.old_input = DropLineEdit()
+        self.new_input = DropLineEdit()
         self.output_input = QLineEdit(str(Path.cwd() / "dbc_compare_report.xlsx"))
         self.run_button = QPushButton("Run Comparison")
         self.open_button = QPushButton("Open Report")
         self.progress = QProgressBar()
         self.log_view = QTextEdit()
+
+        # Filter checkboxes
+        self.chk_added = QCheckBox("Added")
+        self.chk_removed = QCheckBox("Removed")
+        self.chk_modified = QCheckBox("Modified")
+        self.chk_renamed = QCheckBox("Renamed")
+        for chk in (self.chk_added, self.chk_removed, self.chk_modified, self.chk_renamed):
+            chk.setChecked(True)
 
         self._build_menu()
         self._build_layout()
@@ -103,16 +155,9 @@ class MainWindow(QMainWindow):
     def _build_layout(self) -> None:
         central = QWidget()
         root = QVBoxLayout(central)
-        brand_row = QHBoxLayout()
-        logo = QLabel()
+
+        # Brand row
         logo_pixmap = QPixmap(str(_resource_path("vinfast_logo.png")))
-        if not logo_pixmap.isNull():
-            logo.setPixmap(
-                logo_pixmap.scaledToHeight(
-                    44,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
         brand_row = QHBoxLayout()
         brand_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -120,35 +165,27 @@ class MainWindow(QMainWindow):
         logo.setPixmap(logo_pixmap.scaled(
             52, 52,
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         ))
         logo.setFixedSize(52, 52)
 
         title = QLabel("DBC Compare Tool")
-        title.setStyleSheet("""
-            QLabel {
-                font-size: 22px;
-                font-weight: bold;
-            }
-        """)
+        title.setStyleSheet("QLabel { font-size: 22px; font-weight: bold; }")
 
-        version = QLabel("Version 0.1.2")
-        version.setStyleSheet("""
-            QLabel {
-                color: gray;
-                font-size: 11px;
-            }
-        """)
+        version_label = QLabel(f"Version {__version__}")
+        version_label.setStyleSheet("QLabel { color: gray; font-size: 11px; }")
 
         title_column = QVBoxLayout()
         title_column.setSpacing(0)
         title_column.addWidget(title)
-        title_column.addWidget(version)
+        title_column.addWidget(version_label)
 
         brand_row.addWidget(logo)
         brand_row.addSpacing(12)
         brand_row.addLayout(title_column)
         brand_row.addStretch()
+
+        # Input form
         form = QGridLayout()
 
         form.addWidget(QLabel("Old Baseline Folder"), 0, 0)
@@ -169,6 +206,14 @@ class MainWindow(QMainWindow):
         output_button.clicked.connect(self._choose_report)
         form.addWidget(output_button, 2, 2)
 
+        # Filter group
+        filter_group = QGroupBox("Include Change Types")
+        filter_layout = QHBoxLayout(filter_group)
+        for chk in (self.chk_added, self.chk_removed, self.chk_modified, self.chk_renamed):
+            filter_layout.addWidget(chk)
+        filter_layout.addStretch()
+
+        # Action buttons
         buttons = QHBoxLayout()
         buttons.addWidget(self.run_button)
         buttons.addWidget(self.open_button)
@@ -181,6 +226,7 @@ class MainWindow(QMainWindow):
 
         root.addLayout(brand_row)
         root.addLayout(form)
+        root.addWidget(filter_group)
         root.addLayout(buttons)
         root.addWidget(self.progress)
         root.addWidget(QLabel("Execution Log"))
@@ -197,11 +243,26 @@ class MainWindow(QMainWindow):
             target.setText(folder)
 
     def _choose_report(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Save Excel Report", self.output_input.text(), "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Excel Report", self.output_input.text(), "Excel (*.xlsx)"
+        )
         if path:
             if not path.lower().endswith(".xlsx"):
                 path += ".xlsx"
             self.output_input.setText(path)
+
+    def _selected_change_types(self) -> set[str]:
+        types: set[str] = set()
+        if self.chk_added.isChecked():
+            types.add("Added")
+        if self.chk_removed.isChecked():
+            types.add("Removed")
+        if self.chk_modified.isChecked():
+            types.add("Modified")
+        if self.chk_renamed.isChecked():
+            types.add("Renamed")
+            types.add("Possible Rename")
+        return types
 
     def _run_comparison(self) -> None:
         old_folder = Path(self.old_input.text().strip())
@@ -214,12 +275,17 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Invalid Output", "Report path must end with .xlsx.")
             return
 
+        selected = self._selected_change_types()
+        if not selected:
+            QMessageBox.warning(self, "No Filter Selected", "Select at least one change type to include.")
+            return
+
         self.log_view.clear()
         self._log("Starting comparison...")
         self.progress.setRange(0, 0)
         self.run_button.setEnabled(False)
         self.open_button.setEnabled(False)
-        self.worker = CompareWorker(old_folder, new_folder, output_path)
+        self.worker = CompareWorker(old_folder, new_folder, output_path, selected)
         self.worker.log.connect(self._log)
         self.worker.completed.connect(self._completed)
         self.worker.failed.connect(self._failed)

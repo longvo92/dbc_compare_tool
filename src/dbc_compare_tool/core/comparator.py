@@ -140,6 +140,10 @@ class DbcComparator:
                             new_message.comparable_properties(),
                         ),
                         can_id=new_message.can_id,
+                        property_diffs=_get_property_diffs(
+                            old_message.comparable_properties(),
+                            new_message.comparable_properties(),
+                        ),
                     )
                 )
             else:
@@ -157,6 +161,10 @@ class DbcComparator:
                             confidence=None,
                             description=description,
                             can_id=new_message.can_id,
+                            property_diffs=_get_property_diffs(
+                                old_message.comparable_properties(),
+                                new_message.comparable_properties(),
+                            ),
                         )
                     )
             self._compare_signals(dbc_file, old_message, new_message, result)
@@ -195,7 +203,14 @@ class DbcComparator:
             description = _changed_properties(old_signal.comparable_properties(), new_signal.comparable_properties())
             if description:
                 result.signal_changes.append(
-                    Change(dbc_file, "Modified", name, name, None, description, parent_message=parent_name)
+                    Change(
+                        dbc_file, "Modified", name, name, None, description,
+                        parent_message=parent_name,
+                        property_diffs=_get_property_diffs(
+                            old_signal.comparable_properties(),
+                            new_signal.comparable_properties(),
+                        ),
+                    )
                 )
 
         unmatched_old = [signal for name, signal in old_message.signals.items() if name not in matched_old]
@@ -221,6 +236,10 @@ class DbcComparator:
                         "Signal Name",
                         old_signal.name,
                         new_signal.name,
+                        old_signal.comparable_properties(),
+                        new_signal.comparable_properties(),
+                    ),
+                    property_diffs=_get_property_diffs(
                         old_signal.comparable_properties(),
                         new_signal.comparable_properties(),
                     ),
@@ -267,6 +286,17 @@ class DbcComparator:
                     description=f"Signal {change_type.lower()} with parent message",
                 )
             )
+
+
+def _get_property_diffs(
+    old: dict[str, object], new: dict[str, object]
+) -> tuple[tuple[str, str, str], ...]:
+    changed_keys = {key for key in set(old) | set(new) if old.get(key) != new.get(key)}
+    diffs: list[tuple[str, str, str]] = []
+    for key in _ordered_changed_keys(changed_keys):
+        label = PROPERTY_LABELS.get(key, key)
+        diffs.append((label, _format_property_value(key, old.get(key)), _format_property_value(key, new.get(key))))
+    return tuple(diffs)
 
 
 def _changed_properties(old: dict[str, object], new: dict[str, object]) -> str:
