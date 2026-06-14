@@ -54,6 +54,9 @@ _SUMMARY_METRIC_FILL: dict[str, str] = {
     "Total Changes":     "F0F0F0",
 }
 
+_OLD_VAL_FILL = "FCE4D6"   # light salmon — what it was
+_NEW_VAL_FILL = "E2EFDA"   # light green  — what it became
+
 _THIN = Side(style="thin", color="D0D0D0")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 
@@ -64,15 +67,17 @@ def write_excel_report(result: ComparisonResult, output_path: Path) -> Path:
     summary_sheet.title = "Summary"
     message_sheet = workbook.create_sheet("Message Details")
     signal_sheet = workbook.create_sheet("Signal Details")
+    diff_sheet = workbook.create_sheet("Property Diff")
 
     _write_summary(summary_sheet, result)
     _write_message_details(message_sheet, result.message_changes)
     _write_signal_details(signal_sheet, result.signal_changes)
+    _write_property_diff(diff_sheet, result.message_changes, result.signal_changes)
 
     _format_summary(summary_sheet)
-    # change_col is 1-based index of the "Change Type" column
     _format_detail_sheet(message_sheet, change_col=2, conf_score_col=6, conf_level_col=7)
     _format_detail_sheet(signal_sheet, change_col=3, conf_score_col=6, conf_level_col=7)
+    _format_property_diff_sheet(diff_sheet)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(output_path)
@@ -139,6 +144,50 @@ def _write_signal_details(sheet, changes: list[Change]) -> None:
             change.confidence_level,
             change.description,
         ])
+
+
+def _write_property_diff(
+    sheet,
+    message_changes: list[Change],
+    signal_changes: list[Change],
+) -> None:
+    sheet.append([
+        "DBC File",
+        "Entity Type",
+        "Old Name",
+        "New Name",
+        "Parent Message",
+        "Change Type",
+        "Property",
+        "Old Value",
+        "New Value",
+    ])
+    for change in message_changes:
+        for prop, old_val, new_val in change.property_diffs:
+            sheet.append([
+                change.dbc_file,
+                "Message",
+                change.old_name,
+                change.new_name,
+                "",
+                change.change_type,
+                prop,
+                old_val,
+                new_val,
+            ])
+    for change in signal_changes:
+        for prop, old_val, new_val in change.property_diffs:
+            sheet.append([
+                change.dbc_file,
+                "Signal",
+                change.old_name,
+                change.new_name,
+                change.parent_message,
+                change.change_type,
+                prop,
+                old_val,
+                new_val,
+            ])
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +281,39 @@ def _format_detail_sheet(
         max_len = max(len(str(cell.value or "")) for cell in col_cells)
         col_letter = get_column_letter(col_cells[0].column)
         sheet.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 60)
+
+
+def _format_property_diff_sheet(sheet) -> None:
+    header_fill = PatternFill("solid", fgColor=_HEADER_BG)
+    header_font = Font(color=_HEADER_FG, bold=True, size=11)
+
+    for cell in sheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = _BORDER
+    sheet.row_dimensions[1].height = 26
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
+    for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+        change_type = str(row[5].value or "")  # column 6 = Change Type
+        row_fill = PatternFill("solid", fgColor=_CHANGE_ROW_FILL.get(change_type, "FFFFFF"))
+
+        for cell in row:
+            cell.fill = row_fill
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.border = _BORDER
+
+        row[7].fill = PatternFill("solid", fgColor=_OLD_VAL_FILL)  # Old Value — salmon
+        row[8].fill = PatternFill("solid", fgColor=_NEW_VAL_FILL)  # New Value — green
+        sheet.row_dimensions[row_idx].height = 18
+
+    for col_cells in sheet.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col_cells)
+        col_letter = get_column_letter(col_cells[0].column)
+        sheet.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 50)
 
 
 # ---------------------------------------------------------------------------

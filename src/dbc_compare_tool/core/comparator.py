@@ -321,13 +321,8 @@ def _renamed_item_description(
     old_properties: dict[str, object],
     new_properties: dict[str, object],
 ) -> str:
-    lines = [
-        f"{name_label}: {old_name} -> {new_name}",
-    ]
-    changed_properties = _changed_properties(old_properties, new_properties)
-    if changed_properties:
-        lines.append(changed_properties)
-    return "\n".join(lines)
+    # Name change is already captured in old_name/new_name columns; only list property changes.
+    return _changed_properties(old_properties, new_properties)
 
 
 def _ordered_changed_keys(keys: set[str]) -> list[str]:
