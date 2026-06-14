@@ -313,7 +313,7 @@ class MainWindow(QMainWindow):
 
     def _show_help_document(self, title: str, filename: str) -> None:
         try:
-            content = _read_resource_text(filename)
+            content = _read_resource_text(filename).replace("{version}", __version__)
         except OSError as exc:
             QMessageBox.critical(self, title, f"Unable to open help file: {exc}")
             return
