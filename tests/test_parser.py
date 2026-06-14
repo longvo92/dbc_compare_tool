@@ -1,0 +1,77 @@
+"""Parser tests using example DBC files."""
+
+import unittest
+from pathlib import Path
+
+from dbc_compare_tool.core.parser import parse_dbc
+
+_EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
+_OLD_BUS_A = _EXAMPLES / "old" / "Bus_A.dbc"
+_NEW_BUS_A = _EXAMPLES / "new" / "Bus_A.dbc"
+
+
+class TestParseOldBusA(unittest.TestCase):
+    def setUp(self):
+        self.db = parse_dbc(_OLD_BUS_A)
+
+    def test_message_count(self):
+        self.assertEqual(len(self.db.messages), 3)
+
+    def test_message_names(self):
+        self.assertIn("BCM_Status", self.db.messages)
+        self.assertIn("EventMatrix_Old", self.db.messages)
+        self.assertIn("Engine_Status", self.db.messages)
+
+    def test_bcm_status_attributes(self):
+        msg = self.db.messages["BCM_Status"]
+        self.assertEqual(msg.can_id, 100)
+        self.assertEqual(msg.dlc, 8)
+        self.assertEqual(msg.transmitter, "BCM")
+        self.assertEqual(msg.cycle_time_ms, 10)
+
+    def test_bcm_status_signals(self):
+        signals = self.db.messages["BCM_Status"].signals
+        self.assertEqual(len(signals), 2)
+        self.assertIn("VehicleSpeed", signals)
+        self.assertIn("IgnitionState", signals)
+
+    def test_vehicle_speed_properties(self):
+        sig = self.db.messages["BCM_Status"].signals["VehicleSpeed"]
+        self.assertEqual(sig.start_bit, 0)
+        self.assertEqual(sig.length, 16)
+        self.assertAlmostEqual(sig.factor, 0.01)
+        self.assertEqual(sig.unit, "km/h")
+        self.assertFalse(sig.is_signed)
+
+    def test_engine_status_signal_count(self):
+        self.assertEqual(len(self.db.messages["Engine_Status"].signals), 2)
+
+    def test_event_matrix_signal_count(self):
+        self.assertEqual(len(self.db.messages["EventMatrix_Old"].signals), 8)
+
+    def test_db_path(self):
+        self.assertEqual(self.db.path, _OLD_BUS_A)
+
+
+class TestParseNewBusA(unittest.TestCase):
+    def setUp(self):
+        self.db = parse_dbc(_NEW_BUS_A)
+
+    def test_message_count(self):
+        self.assertEqual(len(self.db.messages), 3)
+
+    def test_message_names(self):
+        self.assertIn("Body_Status", self.db.messages)
+        self.assertIn("EventMatrix_New", self.db.messages)
+        self.assertIn("Engine_Info", self.db.messages)
+
+    def test_engine_info_has_three_signals(self):
+        self.assertEqual(len(self.db.messages["Engine_Info"].signals), 3)
+
+    def test_veh_spd_max_updated(self):
+        sig = self.db.messages["Body_Status"].signals["VehSpd"]
+        self.assertEqual(sig.maximum, 220.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

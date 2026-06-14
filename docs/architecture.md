@@ -25,11 +25,12 @@ This project is a local Windows desktop application for automotive engineers com
 
 4. Report Generator
    - Writes a single Excel workbook.
-   - Always writes exactly three sheets: `Summary`, `Message Details`, and `Signal Details`.
+   - Writes five sheets in order: `Summary`, `DBC Overview`, `Message Details`, `Signal Details`, and `Property Diff`.
 
 5. UI Layer
    - PySide6 desktop UI.
    - Runs comparison on a worker thread to keep the UI responsive.
+   - Persists last-used folder paths via `QSettings("VinFast", "DBCCompareTool")` (Windows registry).
 
 6. Packaging Layer
    - PyInstaller spec for producing a standalone Windows application.
@@ -54,8 +55,8 @@ Message rename detection uses normalized frame ID equality. Signal rename detect
 
 ## Incremental Roadmap
 
-1. Core parser, comparison, rename detection, and Excel report.
-2. Desktop UI workflow.
+1. Core parser, comparison, rename detection, and Excel report. *(done)*
+2. Desktop UI workflow. *(done)*
 3. Real-project calibration tests using anonymized DBC baselines.
 4. Packaging smoke test on a clean Windows machine.
 5. Optional richer reporting if engineers need comments, value tables, or additional attributes in reports.

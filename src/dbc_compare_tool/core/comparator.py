@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
 from dbc_compare_tool.core.discovery import discover_dbc_pairs
-from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, Message, Signal
+from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, FilePairSummary, Message, Signal
 from dbc_compare_tool.core.parser import parse_dbc
 from dbc_compare_tool.core.rename import EventMessageDetector, MessageRenameDetector, SignalRenameDetector
 
@@ -63,16 +64,37 @@ class DbcComparator:
         self.message_rename_detector = message_rename_detector
         self.signal_rename_detector = signal_rename_detector
 
-    def compare_folders(self, old_folder: Path, new_folder: Path) -> ComparisonResult:
+    def compare_folders(
+        self,
+        old_folder: Path,
+        new_folder: Path,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ComparisonResult:
         result = ComparisonResult()
         old_only: list[_DatabaseCandidate] = []
         new_only: list[_DatabaseCandidate] = []
 
-        for pair in discover_dbc_pairs(old_folder, new_folder):
+        pairs = list(discover_dbc_pairs(old_folder, new_folder))
+        total = len(pairs)
+
+        for i, pair in enumerate(pairs, 1):
             if pair.old_path and pair.new_path:
                 old_db = parse_dbc(pair.old_path)
                 new_db = parse_dbc(pair.new_path)
+                if progress_callback:
+                    progress_callback(f"[{i}/{total}] Comparing: {pair.relative_path}")
                 self.compare_databases(pair.relative_path, old_db, new_db, result)
+                result.file_pairs.append(FilePairSummary(
+                    dbc_file=pair.relative_path,
+                    status="Matched",
+                    old_path=pair.relative_path,
+                    new_path=pair.relative_path,
+                    pairing_confidence=None,
+                    message_count_old=len(old_db.messages),
+                    message_count_new=len(new_db.messages),
+                    signal_count_old=_count_signals(old_db),
+                    signal_count_new=_count_signals(new_db),
+                ))
             elif pair.old_path:
                 old_only.append(_DatabaseCandidate(pair.relative_path, parse_dbc(pair.old_path)))
             elif pair.new_path:
@@ -83,30 +105,66 @@ class DbcComparator:
         matched_new = {id(match.new) for match in file_matches}
 
         for match in file_matches:
-            self.compare_databases(
-                _format_file_pair_label(match.old.relative_path, match.new.relative_path),
-                match.old.database,
-                match.new.database,
-                result,
-            )
+            label = _format_file_pair_label(match.old.relative_path, match.new.relative_path)
+            if progress_callback:
+                progress_callback(f"Comparing renamed DBC: {label}")
+            self.compare_databases(label, match.old.database, match.new.database, result)
+            result.file_pairs.append(FilePairSummary(
+                dbc_file=label,
+                status="DBC Renamed",
+                old_path=match.old.relative_path,
+                new_path=match.new.relative_path,
+                pairing_confidence=match.confidence,
+                message_count_old=len(match.old.database.messages),
+                message_count_new=len(match.new.database.messages),
+                signal_count_old=_count_signals(match.old.database),
+                signal_count_new=_count_signals(match.new.database),
+            ))
 
         for candidate in old_only:
             if id(candidate) not in matched_old:
+                if progress_callback:
+                    progress_callback(f"DBC removed: {candidate.relative_path}")
                 self.compare_databases(
                     candidate.relative_path,
                     candidate.database,
                     DbcDatabase(path=Path(candidate.relative_path)),
                     result,
                 )
+                result.file_pairs.append(FilePairSummary(
+                    dbc_file=candidate.relative_path,
+                    status="DBC Removed",
+                    old_path=candidate.relative_path,
+                    new_path="",
+                    pairing_confidence=None,
+                    message_count_old=len(candidate.database.messages),
+                    message_count_new=0,
+                    signal_count_old=_count_signals(candidate.database),
+                    signal_count_new=0,
+                ))
 
         for candidate in new_only:
             if id(candidate) not in matched_new:
+                if progress_callback:
+                    progress_callback(f"DBC added: {candidate.relative_path}")
                 self.compare_databases(
                     candidate.relative_path,
                     DbcDatabase(path=Path(candidate.relative_path)),
                     candidate.database,
                     result,
                 )
+                result.file_pairs.append(FilePairSummary(
+                    dbc_file=candidate.relative_path,
+                    status="DBC Added",
+                    old_path="",
+                    new_path=candidate.relative_path,
+                    pairing_confidence=None,
+                    message_count_old=0,
+                    message_count_new=len(candidate.database.messages),
+                    signal_count_old=0,
+                    signal_count_new=_count_signals(candidate.database),
+                ))
+
         return result
 
     def compare_databases(
@@ -464,6 +522,10 @@ def _format_file_pair_label(old_relative_path: str, new_relative_path: str) -> s
     if old_relative_path == new_relative_path:
         return old_relative_path
     return f"{old_relative_path} -> {new_relative_path}"
+
+
+def _count_signals(db: DbcDatabase) -> int:
+    return sum(len(msg.signals) for msg in db.messages.values())
 
 
 def _jaccard(left: set[tuple[Any, ...]], right: set[tuple[Any, ...]]) -> float:

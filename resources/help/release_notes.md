@@ -1,4 +1,21 @@
 # DBC Compare Tool - Release Notes
+## Version 0.1.4
+
+### Added
+
+- **DBC Overview sheet** (2nd Excel sheet): displays one row per DBC file pair with pairing status (`Matched` / `DBC Added` / `DBC Removed` / `DBC Renamed`), pairing confidence, and message/signal counts for both old and new baselines.
+- **Path persistence**: the tool now remembers the last-used Old Baseline, New Baseline, and Report Path across sessions (stored in Windows registry via `QSettings`).
+- **Per-file progress logging**: the Execution Log now shows each DBC file being processed (e.g. `[2/7] Comparing: Bus_A.dbc`) instead of a single "Discovering..." line.
+- **Status bar**: a status bar at the bottom of the window shows `Ready` on startup, a change count summary after a successful run, and an error notice on failure.
+- **Unit tests**: `tests/` directory with 38 tests covering the parser, comparator, and rename detection engine — satisfies the CI `pytest` step.
+
+### Changed
+
+- **Resizable layout**: the window now uses a vertical `QSplitter` between the input panel and the Execution Log, letting users resize the log area by dragging the divider.
+- **Minimum window size** set to 700 × 500 to prevent layout collapse on small screens.
+- **`architecture.md`** updated to reflect the current five-sheet report structure and path-persistence behaviour.
+
+---
 ## Version 0.1.3
 
 ### Added

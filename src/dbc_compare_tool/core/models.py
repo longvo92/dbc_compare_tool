@@ -86,6 +86,19 @@ class FilePair:
 
 
 @dataclass(frozen=True)
+class FilePairSummary:
+    dbc_file: str
+    status: str  # "Matched" | "DBC Added" | "DBC Removed" | "DBC Renamed"
+    old_path: str
+    new_path: str
+    pairing_confidence: float | None
+    message_count_old: int
+    message_count_new: int
+    signal_count_old: int
+    signal_count_new: int
+
+
+@dataclass(frozen=True)
 class Change:
     dbc_file: str
     change_type: str
@@ -103,6 +116,7 @@ class Change:
 class ComparisonResult:
     message_changes: list[Change] = field(default_factory=list)
     signal_changes: list[Change] = field(default_factory=list)
+    file_pairs: list[FilePairSummary] = field(default_factory=list)
 
     def summary(self) -> dict[str, int]:
         metrics = {

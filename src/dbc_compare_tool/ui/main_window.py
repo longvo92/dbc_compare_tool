@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QSettings, QThread, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
+    QSplitter,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -53,6 +55,7 @@ def _filter_result(result: ComparisonResult, selected_types: set[str]) -> Compar
     return ComparisonResult(
         message_changes=[c for c in result.message_changes if c.change_type in selected_types],
         signal_changes=[c for c in result.signal_changes if c.change_type in selected_types],
+        file_pairs=result.file_pairs,
     )
 
 
@@ -100,7 +103,11 @@ class CompareWorker(QThread):
     def run(self) -> None:
         try:
             self.log.emit("Discovering and parsing DBC files...")
-            result = DbcComparator().compare_folders(self.old_folder, self.new_folder)
+            result = DbcComparator().compare_folders(
+                self.old_folder,
+                self.new_folder,
+                progress_callback=lambda msg: self.log.emit(msg),
+            )
             if self.selected_types:
                 result = _filter_result(result, self.selected_types)
             self.log.emit("Writing Excel report...")
@@ -115,9 +122,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("DBC Compare Tool")
         self.setWindowIcon(_app_icon())
-        self.resize(860, 620)
+        self.resize(860, 660)
+        self.setMinimumSize(700, 500)
         self.worker: CompareWorker | None = None
         self.last_report: Path | None = None
+        self._settings = QSettings("VinFast", "DBCCompareTool")
 
         self.old_input = DropLineEdit()
         self.new_input = DropLineEdit()
@@ -138,6 +147,8 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self._build_layout()
         self._wire_events()
+        self._restore_paths()
+        self.statusBar().showMessage("Ready")
 
     def _build_menu(self) -> None:
         help_menu = self.menuBar().addMenu("Help")
@@ -153,9 +164,6 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(lambda: self._show_help_document("About", "help/about.md"))
 
     def _build_layout(self) -> None:
-        central = QWidget()
-        root = QVBoxLayout(central)
-
         # Brand row
         logo_pixmap = QPixmap(str(_resource_path("vinfast_logo.png")))
         brand_row = QHBoxLayout()
@@ -224,14 +232,30 @@ class MainWindow(QMainWindow):
         self.log_view.setReadOnly(True)
         self.open_button.setEnabled(False)
 
-        root.addLayout(brand_row)
-        root.addLayout(form)
-        root.addWidget(filter_group)
-        root.addLayout(buttons)
-        root.addWidget(self.progress)
-        root.addWidget(QLabel("Execution Log"))
-        root.addWidget(self.log_view)
-        self.setCentralWidget(central)
+        # Top pane: controls
+        top_widget = QWidget()
+        top_layout = QVBoxLayout(top_widget)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.addLayout(brand_row)
+        top_layout.addLayout(form)
+        top_layout.addWidget(filter_group)
+        top_layout.addLayout(buttons)
+        top_layout.addWidget(self.progress)
+
+        # Bottom pane: log
+        log_widget = QWidget()
+        log_layout = QVBoxLayout(log_widget)
+        log_layout.setContentsMargins(0, 0, 0, 0)
+        log_layout.addWidget(QLabel("Execution Log"))
+        log_layout.addWidget(self.log_view)
+
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.addWidget(top_widget)
+        splitter.addWidget(log_widget)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+
+        self.setCentralWidget(splitter)
 
     def _wire_events(self) -> None:
         self.run_button.clicked.connect(self._run_comparison)
@@ -291,6 +315,19 @@ class MainWindow(QMainWindow):
         self.worker.failed.connect(self._failed)
         self.worker.start()
 
+    def _restore_paths(self) -> None:
+        if val := self._settings.value("last_old_folder"):
+            self.old_input.setText(str(val))
+        if val := self._settings.value("last_new_folder"):
+            self.new_input.setText(str(val))
+        if val := self._settings.value("last_report_path"):
+            self.output_input.setText(str(val))
+
+    def _save_paths(self) -> None:
+        self._settings.setValue("last_old_folder", self.old_input.text())
+        self._settings.setValue("last_new_folder", self.new_input.text())
+        self._settings.setValue("last_report_path", self.output_input.text())
+
     def _completed(self, report_path: Path, summary: dict) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
@@ -299,12 +336,18 @@ class MainWindow(QMainWindow):
         self.last_report = report_path
         self._log(f"Report generated: {report_path}")
         self._log(f"Total changes: {summary['Total Changes']}")
+        self._save_paths()
+        ts = datetime.now().strftime("%H:%M")
+        self.statusBar().showMessage(
+            f"Last run: {summary['Total Changes']} total changes  ·  {ts}"
+        )
 
     def _failed(self, message: str) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self.run_button.setEnabled(True)
         self._log(f"Failed: {message}")
+        self.statusBar().showMessage("Failed — see log for details")
         QMessageBox.critical(self, "Comparison Failed", message)
 
     def _open_report(self) -> None:
