@@ -1,4 +1,22 @@
 # DBC Compare Tool - Release Notes
+## Version 0.1.3
+
+### Added
+
+- **Property Diff sheet** (4th Excel sheet): displays a structured before/after table for every changed property, one row per property. Old values are highlighted in salmon, new values in green for quick visual scanning.
+- **Change Type filter** in the GUI: checkboxes (Added / Removed / Modified / Renamed) let users include only the change categories they care about before generating the report.
+- **Drag & drop support** for folder inputs: users can now drag a folder directly onto the Old Baseline or New Baseline fields instead of using the Browse button.
+
+### Changed
+
+- **CAN ID** is now displayed in hexadecimal format (`0x1A3`) across all report sheets, consistent with automotive toolchain conventions.
+- **Excel report styling** overhauled for readability:
+  - Rows are color-coded by change type (green = Added, salmon = Removed, yellow = Modified, blue = Renamed).
+  - Confidence Level cells are highlighted (green = High, yellow = Medium, red = Low) and bold.
+  - Summary sheet now includes a report title and generation timestamp.
+  - All cells have a subtle border grid and consistent row heights.
+
+---
 ## Version 0.1.2
 
 ### Changed
