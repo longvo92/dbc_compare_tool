@@ -164,7 +164,7 @@ class EventMessageDetector:
 
 
 class MessageRenameDetector(GreedyRenameDetector[Message]):
-    threshold = 0.78
+    threshold = 0.60
 
     def score(self, old: Message, new: Message) -> tuple[float, tuple[str, ...]]:
         score = 0.0
