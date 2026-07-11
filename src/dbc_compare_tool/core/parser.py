@@ -65,6 +65,7 @@ def _map_message(cantools_message: Any) -> Message:
         transmitter=_format_senders(cantools_message.senders),
         is_extended_frame=bool(cantools_message.is_extended_frame),
         cycle_time_ms=cantools_message.cycle_time,
+        comment=_normalize_comment(cantools_message.comment),
     )
     for cantools_signal in cantools_message.signals:
         signal = _map_signal(cantools_signal)
@@ -89,6 +90,8 @@ def _map_signal(cantools_signal: Any) -> Signal:
         is_multiplexer=bool(cantools_signal.is_multiplexer),
         multiplexer_ids=tuple(cantools_signal.multiplexer_ids or ()),
         multiplexer_signal=cantools_signal.multiplexer_signal,
+        value_descriptions=tuple(sorted((int(k), str(v)) for k, v in (cantools_signal.choices or {}).items())),
+        comment=_normalize_comment(cantools_signal.comment),
     )
 
 
@@ -110,3 +113,11 @@ def _map_value_type(cantools_signal: Any) -> str:
 
 def _format_senders(senders: list[str] | tuple[str, ...]) -> str:
     return ",".join(senders) if senders else "Vector__XXX"
+
+
+def _normalize_comment(comment: Any) -> str:
+    if comment is None:
+        return ""
+    if isinstance(comment, dict):
+        return "; ".join(str(value) for value in comment.values() if value)
+    return str(comment)

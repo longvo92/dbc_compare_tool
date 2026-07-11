@@ -22,6 +22,8 @@ class Signal:
     is_multiplexer: bool = False
     multiplexer_ids: tuple[int, ...] = ()
     multiplexer_signal: str | None = None
+    value_descriptions: tuple[tuple[int, str], ...] = ()
+    comment: str = ""
 
     def comparable_properties(self) -> dict[str, Any]:
         return {
@@ -39,6 +41,8 @@ class Signal:
             "Multiplexer": self.is_multiplexer,
             "Multiplexer IDs": self.multiplexer_ids,
             "Multiplexer Signal": self.multiplexer_signal,
+            "Value Descriptions": self.value_descriptions,
+            "Description": self.comment,
         }
 
     def layout_key(self) -> tuple[Any, ...]:
@@ -57,6 +61,7 @@ class Message:
     is_extended_frame: bool = False
     signals: dict[str, Signal] = field(default_factory=dict)
     cycle_time_ms: int | None = None
+    comment: str = ""
 
     def comparable_properties(self) -> dict[str, Any]:
         return {
@@ -66,6 +71,7 @@ class Message:
             "Extended Frame": self.is_extended_frame,
             "Cycle Time": self.cycle_time_ms,
             "Signal Count": len(self.signals),
+            "Description": self.comment,
         }
 
     def signal_layout(self) -> set[tuple[Any, ...]]:

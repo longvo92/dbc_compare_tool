@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dbc_compare_tool.core.discovery import discover_dbc_pairs
-from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, FilePairSummary, Message, Signal
+from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, FilePairSummary, Message
 from dbc_compare_tool.core.parser import parse_dbc
 from dbc_compare_tool.core.rename import EventMessageDetector, MessageRenameDetector, SignalRenameDetector
 
@@ -28,12 +28,14 @@ PROPERTY_ORDER = (
     "Multiplexer",
     "Multiplexer IDs",
     "Multiplexer Signal",
+    "Value Descriptions",
     "CAN ID",
     "DLC",
     "Transmitter",
     "Extended Frame",
     "Cycle Time",
     "Signal Count",
+    "Description",
 )
 PROPERTY_LABELS = {
     "Minimum": "Min",
@@ -227,14 +229,56 @@ class DbcComparator:
                     )
             self._compare_signals(dbc_file, old_message, new_message, result)
 
-        for frame_id in sorted(set(old_by_id) - set(new_by_id)):
+        old_only_ids = sorted(set(old_by_id) - set(new_by_id))
+        new_only_ids = sorted(set(new_by_id) - set(old_by_id))
+        unmatched_old_msgs = [old_by_id[fid] for fid in old_only_ids]
+        unmatched_new_msgs = [new_by_id[fid] for fid in new_only_ids]
+
+        detector = self.message_rename_detector or MessageRenameDetector()
+        rename_matches = detector.match(unmatched_old_msgs, unmatched_new_msgs)
+
+        matched_old_ids = {match.old.can_id for match in rename_matches}
+        matched_new_ids = {match.new.can_id for match in rename_matches}
+
+        for match in rename_matches:
+            old_message = match.old
+            new_message = match.new
+            result.message_changes.append(
+                Change(
+                    dbc_file=dbc_file,
+                    change_type="Renamed",
+                    old_name=old_message.name,
+                    new_name=new_message.name,
+                    confidence=match.confidence,
+                    confidence_level=match.confidence_level,
+                    description=_renamed_item_description(
+                        "Message Name",
+                        old_message.name,
+                        new_message.name,
+                        old_message.comparable_properties(),
+                        new_message.comparable_properties(),
+                    ),
+                    can_id=new_message.can_id,
+                    property_diffs=_get_property_diffs(
+                        old_message.comparable_properties(),
+                        new_message.comparable_properties(),
+                    ),
+                )
+            )
+            self._compare_signals(dbc_file, old_message, new_message, result)
+
+        for frame_id in old_only_ids:
+            if frame_id in matched_old_ids:
+                continue
             message = old_by_id[frame_id]
             result.message_changes.append(
                 Change(dbc_file, "Removed", message.name, "", None, "Message removed", message.can_id)
             )
             self._append_all_signals(dbc_file, message, "Removed", result)
 
-        for frame_id in sorted(set(new_by_id) - set(old_by_id)):
+        for frame_id in new_only_ids:
+            if frame_id in matched_new_ids:
+                continue
             message = new_by_id[frame_id]
             result.message_changes.append(
                 Change(dbc_file, "Added", "", message.name, None, "Message added", message.can_id)
@@ -276,11 +320,12 @@ class DbcComparator:
 
         # Detect if this is an event-like message and create appropriate detector
         is_event_like = EventMessageDetector.is_event_like(old_message) or EventMessageDetector.is_event_like(new_message)
-        rename_matches = _match_renamed_signals(unmatched_old, unmatched_new, is_event_like=is_event_like)
+        signal_detector = self.signal_rename_detector or SignalRenameDetector(is_event_like=is_event_like)
+        rename_matches = signal_detector.match(unmatched_old, unmatched_new)
 
-        event_warning = EventMessageDetector.get_warning() if is_event_like else ""
-
-        for old_signal, new_signal, confidence, confidence_level in rename_matches:
+        for match in rename_matches:
+            old_signal = match.old
+            new_signal = match.new
             result.signal_changes.append(
                 Change(
                     dbc_file=dbc_file,
@@ -288,8 +333,8 @@ class DbcComparator:
                     change_type="Renamed",
                     old_name=old_signal.name,
                     new_name=new_signal.name,
-                    confidence=confidence,
-                    confidence_level=confidence_level,
+                    confidence=match.confidence,
+                    confidence_level=match.confidence_level,
                     description=_renamed_item_description(
                         "Signal Name",
                         old_signal.name,
@@ -410,6 +455,8 @@ def _format_property_value(key: str, value: object) -> str:
         return "Yes" if value else "No"
     if isinstance(value, float):
         return f"{value:g}"
+    if key == "Value Descriptions" and isinstance(value, tuple):
+        return ", ".join(f"{raw}={label}" for raw, label in value) if value else "blank"
     if isinstance(value, tuple):
         return ", ".join(str(item) for item in value) if value else "blank"
     return str(value)
@@ -417,19 +464,6 @@ def _format_property_value(key: str, value: object) -> str:
 
 def _messages_by_frame_id(database: DbcDatabase) -> dict[int, Message]:
     return {message.can_id: message for message in database.messages.values()}
-
-
-def _match_renamed_signals(
-    old_signals: list[Signal], new_signals: list[Signal], is_event_like: bool = False
-) -> list[tuple[Signal, Signal, float, str]]:
-    """
-    Match renamed signals using confidence-aware detection.
-    
-    Returns list of tuples: (old_signal, new_signal, confidence, confidence_level)
-    """
-    detector = SignalRenameDetector(is_event_like=is_event_like)
-    matches = detector.match(old_signals, new_signals)
-    return [(match.old, match.new, match.confidence, match.confidence_level) for match in matches]
 
 
 def _match_renamed_databases(
