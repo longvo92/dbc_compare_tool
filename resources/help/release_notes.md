@@ -1,4 +1,15 @@
 # DBC Compare Tool - Release Notes
+
+## Version 0.1.5
+
+### Changed
+
+- **UI redesign**: replaced the logo-based header with a clean typographic header (title + version badge + subtitle), added a light application-wide stylesheet (rounded cards, blue primary action button, dark console-style log panel).
+- Removed the vendor logo and vendor-specific branding from the window, taskbar icon, About page, and settings storage key.
+- Removed the PyInstaller packaging spec and CI build/release workflows; the tool now runs directly via `run_gui.bat` / `run_cli.bat` or `python -m dbc_compare_tool` without a build step.
+- Simplified `About` page and `README` to drop packaging/release instructions no longer relevant to this workflow.
+
+---
 ## Version 0.1.4
 
 ### Added
@@ -7,7 +18,7 @@
 - **Path persistence**: the tool now remembers the last-used Old Baseline, New Baseline, and Report Path across sessions (stored in Windows registry via `QSettings`).
 - **Per-file progress logging**: the Execution Log now shows each DBC file being processed (e.g. `[2/7] Comparing: Bus_A.dbc`) instead of a single "Discovering..." line.
 - **Status bar**: a status bar at the bottom of the window shows `Ready` on startup, a change count summary after a successful run, and an error notice on failure.
-- **Unit tests**: `tests/` directory with 38 tests covering the parser, comparator, and rename detection engine — satisfies the CI `pytest` step.
+- **Unit tests**: `tests/` directory with 38 tests covering the parser, comparator, and rename detection engine.
 
 ### Changed
 
@@ -43,13 +54,14 @@
 * Reduced false-positive rename classifications by applying more conservative matching logic.
 * Simplified report output by removing detailed **Rename Evidence** descriptions.
 * Cleaned and streamlined comparison results for improved readability.
+
 ---
 ## Version 0.1.1
 
 ### Changed
 
 - Removed author name from main window UI for cleaner appearance.
-- Enhanced application icon handling with better resolution VinFast logo.
+- Enhanced application icon handling with better resolution logo.
 
 ---
 
@@ -64,7 +76,7 @@ Draft release.
 - Message and signal add/remove/modify/rename detection.
 - Detailed old -> new property descriptions.
 - Rename rows also show changed properties, so rename plus min/max/factor/layout changes are not hidden.
-- VinFast logo in the application and executable icon.
+- Logo in the application and executable icon.
 - Executable version metadata.
 - Help menu with User Guide, Release Notes, and About pages.
 

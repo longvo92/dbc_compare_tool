@@ -2,7 +2,7 @@
 
 ## Goals
 
-This project is a local Windows desktop application for automotive engineers comparing DBC releases. The core comparison logic is kept independent from the UI so it can be tested, reused from CLI, and packaged safely.
+This project is a local Windows desktop application for automotive engineers comparing DBC releases. The core comparison logic is kept independent from the UI so it can be tested and reused from CLI.
 
 ## Layers
 
@@ -29,12 +29,9 @@ This project is a local Windows desktop application for automotive engineers com
    - Writes five sheets in order: `Summary`, `DBC Overview`, `Message Details`, `Signal Details`, and `Property Diff`.
 
 5. UI Layer
-   - PySide6 desktop UI.
+   - PySide6 desktop UI with an application-wide stylesheet.
    - Runs comparison on a worker thread to keep the UI responsive.
-   - Persists last-used folder paths via `QSettings("VinFast", "DBCCompareTool")` (Windows registry).
-
-6. Packaging Layer
-   - PyInstaller spec for producing a standalone Windows application.
+   - Persists last-used folder paths via `QSettings("DbcCompareTool", "DBCCompareTool")` (Windows registry).
 
 ## Rename Strategy
 
@@ -53,7 +50,6 @@ Message rename detection prefers normalized frame ID equality; when frame ID als
 - CAN FD handling may need project-specific interpretation.
 - DBC file rename pairing thresholds may need calibration against real release history.
 - `MessageRenameDetector` threshold (0.60) trades off false positives vs. missed CAN-ID-changed renames; may need recalibration against real release history.
-- PySide6 packaging should be validated on the same Windows/Python version used for release builds.
 
 ## Incremental Roadmap
 
@@ -61,4 +57,3 @@ Message rename detection prefers normalized frame ID equality; when frame ID als
 2. Desktop UI workflow. *(done)*
 3. Message rename detection for CAN-ID changes, and value table/comment comparison. *(done)*
 4. Real-project calibration tests using anonymized DBC baselines.
-5. Packaging smoke test on a clean Windows machine.

@@ -8,10 +8,6 @@ DBC Compare Tool
 
 LongVT23
 
-## Team
-
-VinFast - EED - Application Software Team
-
 ## Description
 
 Desktop utility for comparing Automotive CAN DBC baseline folders and generating Excel-based change reports.
@@ -26,7 +22,3 @@ Key capabilities:
 ## Version
 
 {version}
-
-## Copyright
-
-Copyright (C) 2026 VinFast. All rights reserved.
