@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSettings, QThread, Signal
-from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -41,8 +40,136 @@ def _resource_path(filename: str) -> Path:
     return Path(__file__).resolve().parents[3] / "resources" / filename
 
 
-def _app_icon() -> QIcon:
-    return QIcon(str(_resource_path("vinfast_logo.png")))
+_STYLESHEET = """
+QMainWindow, QDialog {
+    background-color: #f4f6fb;
+}
+QWidget {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 13px;
+    color: #1f2430;
+}
+QLabel#appTitle {
+    font-size: 22px;
+    font-weight: 700;
+    color: #16213a;
+}
+QLabel#appSubtitle {
+    color: #6b7280;
+    font-size: 12px;
+}
+QLabel#versionBadge {
+    color: #2563eb;
+    background: #e3ecfd;
+    border-radius: 9px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+QLabel#sectionLabel {
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+QLineEdit {
+    background: #ffffff;
+    border: 1px solid #d4d9e4;
+    border-radius: 6px;
+    padding: 7px 10px;
+    selection-background-color: #bfd3f8;
+}
+QLineEdit:focus {
+    border: 1px solid #2563eb;
+}
+QPushButton {
+    background: #ffffff;
+    border: 1px solid #d4d9e4;
+    border-radius: 6px;
+    padding: 7px 16px;
+}
+QPushButton:hover { background: #eef2fb; }
+QPushButton:pressed { background: #e0e7f7; }
+QPushButton:disabled { color: #9aa2b1; background: #f0f1f5; }
+QPushButton#primaryButton {
+    background: #2563eb;
+    border: none;
+    color: #ffffff;
+    font-weight: 600;
+    padding: 8px 22px;
+}
+QPushButton#primaryButton:hover { background: #1d4fd7; }
+QPushButton#primaryButton:pressed { background: #1a46bd; }
+QPushButton#primaryButton:disabled { background: #a5bdf2; color: #eef2fb; }
+QGroupBox {
+    background: #ffffff;
+    border: 1px solid #e1e5ee;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding: 10px 12px 6px 12px;
+    font-weight: 600;
+    color: #4b5563;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 4px;
+}
+QCheckBox {
+    spacing: 6px;
+    font-weight: 400;
+}
+QProgressBar {
+    background: #e5e9f2;
+    border: none;
+    border-radius: 4px;
+    max-height: 8px;
+    text-align: center;
+}
+QProgressBar::chunk {
+    background: #2563eb;
+    border-radius: 4px;
+}
+QTextEdit#logView {
+    background: #1e2430;
+    color: #d6e2f3;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Cascadia Mono', 'Consolas', monospace;
+    font-size: 12px;
+    padding: 6px;
+}
+QTextBrowser {
+    background: #ffffff;
+    border: 1px solid #e1e5ee;
+    border-radius: 8px;
+    padding: 10px;
+}
+QMenuBar {
+    background: #f4f6fb;
+}
+QMenuBar::item {
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+QMenuBar::item:selected { background: #e3ecfd; }
+QMenu {
+    background: #ffffff;
+    border: 1px solid #d4d9e4;
+    border-radius: 6px;
+    padding: 4px;
+}
+QMenu::item {
+    padding: 6px 24px;
+    border-radius: 4px;
+}
+QMenu::item:selected { background: #e3ecfd; }
+QStatusBar {
+    background: #eef1f8;
+    color: #4b5563;
+}
+QSplitter::handle { background: transparent; }
+"""
 
 
 def _read_resource_text(filename: str) -> str:
@@ -121,12 +248,11 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("DBC Compare Tool")
-        self.setWindowIcon(_app_icon())
         self.resize(860, 660)
         self.setMinimumSize(700, 500)
         self.worker: CompareWorker | None = None
         self.last_report: Path | None = None
-        self._settings = QSettings("VinFast", "DBCCompareTool")
+        self._settings = QSettings("DbcCompareTool", "DBCCompareTool")
 
         self.old_input = DropLineEdit()
         self.new_input = DropLineEdit()
@@ -164,37 +290,32 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(lambda: self._show_help_document("About", "help/about.md"))
 
     def _build_layout(self) -> None:
-        # Brand row
-        logo_pixmap = QPixmap(str(_resource_path("vinfast_logo.png")))
-        brand_row = QHBoxLayout()
-        brand_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        logo = QLabel()
-        logo.setPixmap(logo_pixmap.scaled(
-            52, 52,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        ))
-        logo.setFixedSize(52, 52)
-
+        # Header
         title = QLabel("DBC Compare Tool")
-        title.setStyleSheet("QLabel { font-size: 22px; font-weight: bold; }")
+        title.setObjectName("appTitle")
 
-        version_label = QLabel(f"Version {__version__}")
-        version_label.setStyleSheet("QLabel { color: gray; font-size: 11px; }")
+        version_label = QLabel(f"v{__version__}")
+        version_label.setObjectName("versionBadge")
 
-        title_column = QVBoxLayout()
-        title_column.setSpacing(0)
-        title_column.addWidget(title)
-        title_column.addWidget(version_label)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+        title_row.addWidget(title)
+        title_row.addWidget(version_label, alignment=Qt.AlignmentFlag.AlignVCenter)
+        title_row.addStretch()
 
-        brand_row.addWidget(logo)
-        brand_row.addSpacing(12)
-        brand_row.addLayout(title_column)
-        brand_row.addStretch()
+        subtitle = QLabel("Compare CAN DBC baselines and export an Excel change report")
+        subtitle.setObjectName("appSubtitle")
+
+        header = QVBoxLayout()
+        header.setSpacing(2)
+        header.addLayout(title_row)
+        header.addWidget(subtitle)
 
         # Input form
-        form = QGridLayout()
+        input_group = QGroupBox("Baselines && Report")
+        form = QGridLayout(input_group)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
 
         form.addWidget(QLabel("Old Baseline Folder"), 0, 0)
         form.addWidget(self.old_input, 0, 1)
@@ -222,31 +343,39 @@ class MainWindow(QMainWindow):
         filter_layout.addStretch()
 
         # Action buttons
+        self.run_button.setObjectName("primaryButton")
         buttons = QHBoxLayout()
+        buttons.setSpacing(8)
         buttons.addWidget(self.run_button)
         buttons.addWidget(self.open_button)
         buttons.addStretch()
 
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
+        self.progress.setTextVisible(False)
+        self.log_view.setObjectName("logView")
         self.log_view.setReadOnly(True)
         self.open_button.setEnabled(False)
 
         # Top pane: controls
         top_widget = QWidget()
         top_layout = QVBoxLayout(top_widget)
-        top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.addLayout(brand_row)
-        top_layout.addLayout(form)
+        top_layout.setContentsMargins(16, 12, 16, 8)
+        top_layout.setSpacing(10)
+        top_layout.addLayout(header)
+        top_layout.addWidget(input_group)
         top_layout.addWidget(filter_group)
         top_layout.addLayout(buttons)
         top_layout.addWidget(self.progress)
 
         # Bottom pane: log
+        log_label = QLabel("EXECUTION LOG")
+        log_label.setObjectName("sectionLabel")
         log_widget = QWidget()
         log_layout = QVBoxLayout(log_widget)
-        log_layout.setContentsMargins(0, 0, 0, 0)
-        log_layout.addWidget(QLabel("Execution Log"))
+        log_layout.setContentsMargins(16, 4, 16, 12)
+        log_layout.setSpacing(6)
+        log_layout.addWidget(log_label)
         log_layout.addWidget(self.log_view)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
@@ -363,7 +492,6 @@ class MainWindow(QMainWindow):
 
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
-        dialog.setWindowIcon(_app_icon())
         dialog.resize(720, 560)
         layout = QVBoxLayout(dialog)
         viewer = QTextBrowser()
@@ -381,7 +509,7 @@ class MainWindow(QMainWindow):
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setWindowIcon(_app_icon())
+    app.setStyleSheet(_STYLESHEET)
     window = MainWindow()
     window.show()
     return app.exec()

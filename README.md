@@ -50,9 +50,8 @@ Run from CLI:
 .\.venv\Scripts\python.exe -m dbc_compare_tool.cli --old path\to\old --new path\to\new --out report.xlsx
 ```
 
-## Packaging
+Quick launchers: `run_gui.bat` and `run_cli.bat` at the repository root.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install pyinstaller
-.\.venv\Scripts\pyinstaller.exe packaging\dbc_compare_tool.spec
-```
+## Version
+
+Current version: 0.1.5. See [resources/help/release_notes.md](resources/help/release_notes.md) for the full changelog (also available from the app's Help menu).
