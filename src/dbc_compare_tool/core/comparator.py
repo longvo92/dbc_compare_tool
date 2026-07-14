@@ -8,7 +8,7 @@ from typing import Any
 
 from dbc_compare_tool.core.discovery import discover_dbc_pairs
 from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, FilePairSummary, Message
-from dbc_compare_tool.core.parser import parse_dbc
+from dbc_compare_tool.core.parser import DbcParseError, parse_dbc
 from dbc_compare_tool.core.rename import EventMessageDetector, MessageRenameDetector, SignalRenameDetector
 
 FILE_RENAME_THRESHOLD = 0.55
@@ -80,27 +80,42 @@ class DbcComparator:
         total = len(pairs)
 
         for i, pair in enumerate(pairs, 1):
-            if pair.old_path and pair.new_path:
-                old_db = parse_dbc(pair.old_path)
-                new_db = parse_dbc(pair.new_path)
+            try:
+                if pair.old_path and pair.new_path:
+                    old_db = parse_dbc(pair.old_path)
+                    new_db = parse_dbc(pair.new_path)
+                    if progress_callback:
+                        progress_callback(f"[{i}/{total}] Comparing: {pair.relative_path}")
+                    self.compare_databases(pair.relative_path, old_db, new_db, result)
+                    result.file_pairs.append(FilePairSummary(
+                        dbc_file=pair.relative_path,
+                        status="Matched",
+                        old_path=pair.relative_path,
+                        new_path=pair.relative_path,
+                        pairing_confidence=None,
+                        message_count_old=len(old_db.messages),
+                        message_count_new=len(new_db.messages),
+                        signal_count_old=_count_signals(old_db),
+                        signal_count_new=_count_signals(new_db),
+                    ))
+                elif pair.old_path:
+                    old_only.append(_DatabaseCandidate(pair.relative_path, parse_dbc(pair.old_path)))
+                elif pair.new_path:
+                    new_only.append(_DatabaseCandidate(pair.relative_path, parse_dbc(pair.new_path)))
+            except DbcParseError as exc:
                 if progress_callback:
-                    progress_callback(f"[{i}/{total}] Comparing: {pair.relative_path}")
-                self.compare_databases(pair.relative_path, old_db, new_db, result)
+                    progress_callback(f"[{i}/{total}] Parse error, skipped: {pair.relative_path} ({exc})")
                 result.file_pairs.append(FilePairSummary(
                     dbc_file=pair.relative_path,
-                    status="Matched",
-                    old_path=pair.relative_path,
-                    new_path=pair.relative_path,
+                    status="Parse Error",
+                    old_path=pair.relative_path if pair.old_path else "",
+                    new_path=pair.relative_path if pair.new_path else "",
                     pairing_confidence=None,
-                    message_count_old=len(old_db.messages),
-                    message_count_new=len(new_db.messages),
-                    signal_count_old=_count_signals(old_db),
-                    signal_count_new=_count_signals(new_db),
+                    message_count_old=0,
+                    message_count_new=0,
+                    signal_count_old=0,
+                    signal_count_new=0,
                 ))
-            elif pair.old_path:
-                old_only.append(_DatabaseCandidate(pair.relative_path, parse_dbc(pair.old_path)))
-            elif pair.new_path:
-                new_only.append(_DatabaseCandidate(pair.relative_path, parse_dbc(pair.new_path)))
 
         file_matches = _match_renamed_databases(old_only, new_only)
         matched_old = {id(match.old) for match in file_matches}
@@ -192,12 +207,15 @@ class DbcComparator:
                         old_name=old_message.name,
                         new_name=new_message.name,
                         confidence=1.0,
-                        description=_renamed_item_description(
-                            "Message Name",
-                            old_message.name,
-                            new_message.name,
-                            old_message.comparable_properties(),
-                            new_message.comparable_properties(),
+                        description=_with_match_reasons(
+                            _renamed_item_description(
+                                "Message Name",
+                                old_message.name,
+                                new_message.name,
+                                old_message.comparable_properties(),
+                                new_message.comparable_properties(),
+                            ),
+                            ("Identical CAN ID",),
                         ),
                         can_id=new_message.can_id,
                         property_diffs=_get_property_diffs(
@@ -237,8 +255,8 @@ class DbcComparator:
         detector = self.message_rename_detector or MessageRenameDetector()
         rename_matches = detector.match(unmatched_old_msgs, unmatched_new_msgs)
 
-        matched_old_ids = {match.old.can_id for match in rename_matches}
-        matched_new_ids = {match.new.can_id for match in rename_matches}
+        matched_old_ids = {_frame_key(match.old) for match in rename_matches}
+        matched_new_ids = {_frame_key(match.new) for match in rename_matches}
 
         for match in rename_matches:
             old_message = match.old
@@ -251,12 +269,15 @@ class DbcComparator:
                     new_name=new_message.name,
                     confidence=match.confidence,
                     confidence_level=match.confidence_level,
-                    description=_renamed_item_description(
-                        "Message Name",
-                        old_message.name,
-                        new_message.name,
-                        old_message.comparable_properties(),
-                        new_message.comparable_properties(),
+                    description=_with_match_reasons(
+                        _renamed_item_description(
+                            "Message Name",
+                            old_message.name,
+                            new_message.name,
+                            old_message.comparable_properties(),
+                            new_message.comparable_properties(),
+                        ),
+                        match.reasons,
                     ),
                     can_id=new_message.can_id,
                     property_diffs=_get_property_diffs(
@@ -335,12 +356,15 @@ class DbcComparator:
                     new_name=new_signal.name,
                     confidence=match.confidence,
                     confidence_level=match.confidence_level,
-                    description=_renamed_item_description(
-                        "Signal Name",
-                        old_signal.name,
-                        new_signal.name,
-                        old_signal.comparable_properties(),
-                        new_signal.comparable_properties(),
+                    description=_with_match_reasons(
+                        _renamed_item_description(
+                            "Signal Name",
+                            old_signal.name,
+                            new_signal.name,
+                            old_signal.comparable_properties(),
+                            new_signal.comparable_properties(),
+                        ),
+                        match.reasons,
                     ),
                     property_diffs=_get_property_diffs(
                         old_signal.comparable_properties(),
@@ -428,6 +452,13 @@ def _renamed_item_description(
     return _changed_properties(old_properties, new_properties)
 
 
+def _with_match_reasons(description: str, reasons: tuple[str, ...]) -> str:
+    if not reasons:
+        return description
+    reasons_line = f"Matched by: {', '.join(reasons)}"
+    return f"{description}\n{reasons_line}" if description else reasons_line
+
+
 def _ordered_changed_keys(keys: set[str]) -> list[str]:
     ordered = [key for key in PROPERTY_ORDER if key in keys]
     ordered.extend(sorted(keys - set(PROPERTY_ORDER)))
@@ -462,8 +493,14 @@ def _format_property_value(key: str, value: object) -> str:
     return str(value)
 
 
-def _messages_by_frame_id(database: DbcDatabase) -> dict[int, Message]:
-    return {message.can_id: message for message in database.messages.values()}
+def _messages_by_frame_id(database: DbcDatabase) -> dict[tuple[int, bool], Message]:
+    # Standard and extended frames share the numeric ID space after masking,
+    # so the extended flag must be part of the key to keep them distinct.
+    return {_frame_key(message): message for message in database.messages.values()}
+
+
+def _frame_key(message: Message) -> tuple[int, bool]:
+    return (message.can_id, message.is_extended_frame)
 
 
 def _match_renamed_databases(
@@ -498,8 +535,8 @@ def _score_database_pair(old: _DatabaseCandidate, new: _DatabaseCandidate) -> tu
     if not old_messages or not new_messages:
         return 0.0, ()
 
-    old_by_id = {message.can_id: message for message in old_messages.values()}
-    new_by_id = {message.can_id: message for message in new_messages.values()}
+    old_by_id = {_frame_key(message): message for message in old_messages.values()}
+    new_by_id = {_frame_key(message): message for message in new_messages.values()}
     common_ids = set(old_by_id) & set(new_by_id)
     if not common_ids:
         return 0.0, ()
@@ -530,14 +567,14 @@ def _score_database_pair(old: _DatabaseCandidate, new: _DatabaseCandidate) -> tu
 
 
 def _common_message_structure_score(
-    old_by_id: dict[int, Message],
-    new_by_id: dict[int, Message],
-    common_ids: set[int],
+    old_by_id: dict[tuple[int, bool], Message],
+    new_by_id: dict[tuple[int, bool], Message],
+    common_ids: set[tuple[int, bool]],
 ) -> float:
     message_scores: list[float] = []
-    for can_id in common_ids:
-        old = old_by_id[can_id]
-        new = new_by_id[can_id]
+    for frame_key in common_ids:
+        old = old_by_id[frame_key]
+        new = new_by_id[frame_key]
         score = 0.0
         if old.dlc == new.dlc:
             score += 0.20
