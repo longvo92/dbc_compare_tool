@@ -63,6 +63,7 @@ _STATUS_FILL: dict[str, str] = {
     "DBC Added":   "E2EFDA",   # light green
     "DBC Removed": "FCE4D6",   # light salmon
     "DBC Renamed": "DDEBF7",   # light blue
+    "Parse Error": "FFC7CE",   # pink-red
 }
 
 _THIN = Side(style="thin", color="D0D0D0")
@@ -106,7 +107,10 @@ def _write_summary(sheet, result: ComparisonResult) -> None:
     sheet.append(["Metric", "Count"])
     summary = result.summary()
     for metric in SUMMARY_ORDER:
-        sheet.append([metric, summary[metric]])
+        sheet.append([metric, summary.get(metric, 0)])
+    for metric in summary:
+        if metric not in SUMMARY_ORDER:
+            sheet.append([metric, summary[metric]])
 
 
 def _write_overview(sheet, file_pairs: list[FilePairSummary]) -> None:

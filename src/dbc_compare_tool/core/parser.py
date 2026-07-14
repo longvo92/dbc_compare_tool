@@ -25,6 +25,8 @@ def parse_dbc(path: Path) -> DbcDatabase:
         raise DbcParseError(f"Unable to read DBC file: {path}") from exc
     except UnsupportedDatabaseFormatError as exc:
         raise DbcParseError(f"Unable to parse DBC file: {path}: {exc}") from exc
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise DbcParseError(f"Unable to parse DBC file: {path}: {exc}") from exc
 
     database = DbcDatabase(path=path)
     for cantools_message in getattr(cantools_db, "messages", []):
@@ -35,10 +37,9 @@ def parse_dbc(path: Path) -> DbcDatabase:
 
 def _load_cantools_database(path: Path) -> Any:
     try:
-        return cantools.database.load_file(
-            path,
+        return cantools.database.load_string(
+            _read_dbc_text(path),
             database_format="dbc",
-            encoding="utf-8",
             strict=False,
             sort_signals=None,
         )
@@ -46,7 +47,7 @@ def _load_cantools_database(path: Path) -> Any:
         if "GenMsgCycleTime" not in str(exc):
             raise
 
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = _read_dbc_text(path)
         if 'BA_DEF_ BO_ "GenMsgCycleTime"' not in text:
             text = LEGACY_CYCLE_TIME_DEFINITION + text
         return cantools.database.load_string(
@@ -55,6 +56,17 @@ def _load_cantools_database(path: Path) -> Any:
             strict=False,
             sort_signals=None,
         )
+
+
+def _read_dbc_text(path: Path) -> str:
+    # DBC files from vendor tools are usually cp1252 (CANdb++ default), newer
+    # exports may be UTF-8, possibly with a BOM (e.g. saved via Notepad).
+    # Try UTF-8 first (utf-8-sig strips the BOM), fall back to cp1252.
+    raw = path.read_bytes()
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
 
 
 def _map_message(cantools_message: Any) -> Message:

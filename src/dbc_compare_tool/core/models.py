@@ -136,8 +136,10 @@ class ComparisonResult:
             "Signals Renamed": 0,
         }
         for change in self.message_changes:
-            metrics[f"Messages {change.change_type}"] += 1
+            key = f"Messages {change.change_type}"
+            metrics[key] = metrics.get(key, 0) + 1
         for change in self.signal_changes:
-            metrics[f"Signals {change.change_type}"] += 1
+            key = f"Signals {change.change_type}"
+            metrics[key] = metrics.get(key, 0) + 1
         metrics["Total Changes"] = sum(metrics.values())
         return metrics

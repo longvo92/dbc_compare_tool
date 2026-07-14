@@ -1,5 +1,21 @@
 # DBC Compare Tool - Release Notes
 
+## Version 0.1.6
+
+### Fixed
+
+- **Standard vs. extended frame ID collision**: a standard frame and an extended frame sharing the same numeric CAN ID were treated as the same message, silently hiding changes on one of them. Messages are now keyed by `(CAN ID, extended flag)` throughout comparison and file-pairing.
+- **One corrupt DBC no longer aborts the whole comparison**: unparsable files are reported with a new `Parse Error` status (highlighted red on the DBC Overview sheet) and the remaining files are still compared.
+- **Encoding robustness**: DBC files are now read as UTF-8 (with or without BOM) with automatic fallback to cp1252 (CANdb++ default), instead of crashing on non-UTF-8 content such as `°C` or a Notepad BOM.
+- **GUI crash on exit during a running comparison**: closing the window now asks for confirmation and shuts the worker thread down cleanly.
+- **CLI error handling**: invalid folders, non-`.xlsx` output paths, and write failures (e.g. report open in Excel) now print a concise error and return a non-zero exit code instead of a traceback; console output no longer crashes on unencodable characters.
+- Summary metrics no longer raise on unexpected change types; `.DBC` files with an uppercase extension are discovered on case-sensitive filesystems.
+
+### Added
+
+- **Match reasons in the report**: renamed messages and signals now include a `Matched by: ...` line (e.g. `Start bit matched, Factor matched, Names are similar`) explaining why the pair was matched, plus per-file CLI progress output.
+
+---
 ## Version 0.1.5
 
 ### Changed

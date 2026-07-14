@@ -54,4 +54,4 @@ Quick launchers: `run_gui.bat` and `run_cli.bat` at the repository root.
 
 ## Version
 
-Current version: 0.1.5. See [resources/help/release_notes.md](resources/help/release_notes.md) for the full changelog (also available from the app's Help menu).
+Current version: 0.1.6. See [resources/help/release_notes.md](resources/help/release_notes.md) for the full changelog (also available from the app's Help menu).

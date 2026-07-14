@@ -18,9 +18,11 @@ def discover_dbc_pairs(old_folder: Path, new_folder: Path) -> list[FilePair]:
 def _collect(folder: Path) -> dict[str, Path]:
     if not folder.exists() or not folder.is_dir():
         raise FileNotFoundError(f"Folder does not exist: {folder}")
+    # Match the extension case-insensitively so *.DBC is found on
+    # case-sensitive filesystems too (rglob("*.dbc") would miss it there).
     return {
         path.relative_to(folder).as_posix(): path
-        for path in folder.rglob("*.dbc")
-        if path.is_file()
+        for path in folder.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".dbc"
     }
 

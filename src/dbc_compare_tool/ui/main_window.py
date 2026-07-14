@@ -482,6 +482,31 @@ class MainWindow(QMainWindow):
     def _open_report(self) -> None:
         if self.last_report and self.last_report.exists():
             os.startfile(self.last_report)
+        else:
+            QMessageBox.information(
+                self, "Report Not Found", "The report file no longer exists. Run the comparison again."
+            )
+
+    def closeEvent(self, event) -> None:
+        if self.worker and self.worker.isRunning():
+            reply = QMessageBox.question(
+                self,
+                "Comparison Running",
+                "A comparison is still running. Quit anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+            # Detach signals, then stop the thread before Qt destroys it,
+            # otherwise the app crashes with "QThread destroyed while running".
+            self.worker.log.disconnect()
+            self.worker.completed.disconnect()
+            self.worker.failed.disconnect()
+            self.worker.terminate()
+            self.worker.wait(3000)
+        event.accept()
 
     def _show_help_document(self, title: str, filename: str) -> None:
         try:
