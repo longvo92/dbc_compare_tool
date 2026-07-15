@@ -1,110 +1,65 @@
-# Main Features
+# User Guide
 
-## Automatic DBC File Matching
+## Getting Started
 
-The tool automatically matches DBC files between Baseline and Current folders.
+1. **Old Baseline Folder** — select (or drag & drop) the folder containing the previous DBC baseline.
+2. **New Baseline Folder** — select (or drag & drop) the folder containing the new DBC baseline.
+3. **Report Path** — choose where to save the Excel report (`.xlsx`).
+4. **Include Change Types** — tick the change categories you want in the report (Added / Removed / Modified / Renamed). All are included by default.
+5. Click **Run Comparison**. Progress appears in the Execution Log. When finished, click **Open Report** to view the result in Excel.
 
-Matching is not based solely on file names. If a DBC file is renamed while its content remains substantially unchanged, the tool can still identify it as the same DBC and compare the corresponding files.
-
-Example:
-
-Baseline:
-
-* BCM.dbc
-
-Current:
-
-* BCM_V2.dbc
-
-Result:
-
-* Detected as a renamed DBC file rather than one removed and one added file.
+The tool remembers your last-used folders and report path, so the next session starts pre-filled.
 
 ---
 
-## Message Rename Detection
+## Understanding the Report
 
-The tool can identify message renames even when the message name changes.
+The Excel report contains the following sheets:
 
-Detection is based on:
+* **Summary** — total change counts by category, with report title and generation time.
+* **DBC Overview** — one row per DBC file pair: pairing status (`Matched` / `DBC Added` / `DBC Removed` / `DBC Renamed` / `Parse Error`), pairing confidence, and message/signal counts for both baselines.
+* **Message Changes** — every added, removed, modified, or renamed message.
+* **Signal Changes** — every added, removed, modified, or renamed signal.
+* **Property Diff** — before/after table for every changed property, one row per property. Old values highlighted in salmon, new values in green.
 
-* CAN ID
-* DLC
-* Signal layout
-* Signal composition
-* Message attributes
-
-Example:
-
-Baseline:
-
-* VehicleStatus
-
-Current:
-
-* Vehicle_Status
-
-Result:
-
-* Classified as Message Rename.
+Rows are color-coded by change type: green = Added, salmon = Removed, yellow = Modified, blue = Renamed. CAN IDs are shown in hexadecimal (e.g. `0x1A3`).
 
 ---
 
-## Signal Rename Detection
+## Main Features
 
-The tool can identify signal renames by comparing technical characteristics rather than relying solely on signal names.
+### Automatic DBC File Matching
 
-Detection considers:
+DBC files are matched between the two folders automatically. Matching is not based solely on file names: if a DBC file was renamed while its content remains substantially unchanged, the tool still identifies it as the same DBC and compares the pair.
 
-* Start Bit
-* Length
-* Byte Order
-* Signedness
-* Scaling (Factor / Offset)
-* Unit
-* Receivers
-* Signal layout within the message
+Example: `BCM.dbc` (old) vs `BCM_V2.dbc` (new) — detected as a renamed DBC file, not as one removed and one added file.
 
-Example:
+### Message Rename Detection
 
-Baseline:
+Message renames are identified even when the message name changes, based on CAN ID, DLC, signal layout, signal composition, and message attributes.
 
-* VehSpd
+Example: `VehicleStatus` renamed to `Vehicle_Status` — classified as **Renamed**, with a `Matched by: ...` explanation in the report.
 
-Current:
+### Signal Rename Detection
 
-* VehicleSpeed
+Signal renames are identified by comparing technical characteristics — start bit, length, byte order, signedness, scaling (factor/offset), unit, receivers, and layout within the message — rather than relying on names alone.
 
-Result:
+Example: `VehSpd` renamed to `VehicleSpeed` — classified as **Renamed**.
 
-* Classified as Signal Rename.
+### Possible Rename
 
----
+For messages containing many structurally similar signals (such as Event Matrix messages), rename detection may be ambiguous. Such cases are reported as **Possible Rename** instead of **Renamed**, so you can review them manually.
 
-## Possible Rename Detection
+### Robust File Handling
 
-For messages containing many structurally similar signals (such as Event Matrix messages), rename detection may be ambiguous.
-
-In such cases, the tool reports:
-
-* Possible Rename
-
-instead of:
-
-* Rename
-
-This reduces false-positive rename classifications and improves report reliability.
+* A corrupt or unparsable DBC file does not stop the comparison: it is marked **Parse Error** (highlighted red in DBC Overview) and the remaining files are still compared.
+* Files with special characters or unusual encodings (UTF-8 with/without BOM, CANdb++ default encoding) open reliably.
 
 ---
 
-## Excel Report Generation
+## Tips
 
-The tool generates a structured Excel report containing:
-
-* Summary
-* DBC Overview
-* Message Changes
-* Signal Changes
-* Rename Information
-* Possible Rename Information
-* Detailed Modification Tracking
+* Drag a folder from Windows Explorer directly onto the baseline fields — no need to click Browse.
+* Drag the divider between the input panel and the Execution Log to resize the log area.
+* Untick change types you don't need before running to get a smaller, focused report.
+* If the report fails to save, make sure the file is not currently open in Excel.
