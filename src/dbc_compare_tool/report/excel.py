@@ -59,11 +59,12 @@ _NEW_VAL_FILL = "E2EFDA"   # light green  — what it became
 
 # Overview sheet status row colors
 _STATUS_FILL: dict[str, str] = {
-    "Matched":     "F2F2F2",   # light gray
-    "DBC Added":   "E2EFDA",   # light green
-    "DBC Removed": "FCE4D6",   # light salmon
-    "DBC Renamed": "DDEBF7",   # light blue
-    "Parse Error": "FFC7CE",   # pink-red
+    "Matched":         "F2F2F2",   # light gray
+    "DBC Added":       "E2EFDA",   # light green
+    "DBC Removed":     "FCE4D6",   # light salmon
+    "DBC Renamed":     "DDEBF7",   # light blue
+    "Manually Paired": "E4DFEC",   # light purple
+    "Parse Error":     "FFC7CE",   # pink-red
 }
 
 _THIN = Side(style="thin", color="D0D0D0")

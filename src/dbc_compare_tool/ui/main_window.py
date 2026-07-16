@@ -8,14 +8,17 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QSettings, QThread, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -23,6 +26,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QProgressBar,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -30,8 +35,9 @@ from PySide6.QtWidgets import (
 )
 
 from dbc_compare_tool import __version__
-from dbc_compare_tool.core.comparator import DbcComparator
-from dbc_compare_tool.core.models import ComparisonResult
+from dbc_compare_tool.core.comparator import DbcComparator, reject_signal_renames
+from dbc_compare_tool.core.discovery import collect_dbc_files
+from dbc_compare_tool.core.models import Change, ComparisonResult
 from dbc_compare_tool.report.excel import write_excel_report
 
 
@@ -47,29 +53,29 @@ QMainWindow, QDialog {
 }
 QWidget {
     font-family: 'Segoe UI', sans-serif;
-    font-size: 13px;
+    font-size: 10pt;
     color: #1f2430;
 }
 QLabel#appTitle {
-    font-size: 22px;
+    font-size: 17pt;
     font-weight: 700;
     color: #16213a;
 }
 QLabel#appSubtitle {
     color: #6b7280;
-    font-size: 12px;
+    font-size: 9pt;
 }
 QLabel#versionBadge {
     color: #2563eb;
     background: #e3ecfd;
     border-radius: 9px;
     padding: 2px 10px;
-    font-size: 11px;
+    font-size: 8pt;
     font-weight: 600;
 }
 QLabel#sectionLabel {
     color: #6b7280;
-    font-size: 11px;
+    font-size: 8pt;
     font-weight: 700;
     letter-spacing: 1px;
 }
@@ -137,7 +143,7 @@ QTextEdit#logView {
     border: none;
     border-radius: 8px;
     font-family: 'Cascadia Mono', 'Consolas', monospace;
-    font-size: 12px;
+    font-size: 9pt;
     padding: 6px;
 }
 QTextBrowser {
@@ -170,6 +176,37 @@ QStatusBar {
     color: #4b5563;
 }
 QSplitter::handle { background: transparent; }
+QTableWidget {
+    background: #ffffff;
+    border: 1px solid #e1e5ee;
+    border-radius: 6px;
+    gridline-color: #edf0f7;
+}
+QHeaderView::section {
+    background: #eef2fb;
+    border: none;
+    border-bottom: 1px solid #d4d9e4;
+    padding: 6px 8px;
+    font-weight: 600;
+    color: #4b5563;
+}
+QComboBox {
+    background: #ffffff;
+    border: 1px solid #d4d9e4;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+QComboBox:focus { border: 1px solid #2563eb; }
+QComboBox QAbstractItemView {
+    background: #ffffff;
+    border: 1px solid #d4d9e4;
+    selection-background-color: #e3ecfd;
+    selection-color: #1f2430;
+}
+QLabel#hintLabel {
+    color: #6b7280;
+    font-size: 9pt;
+}
 """
 
 
@@ -185,6 +222,17 @@ def _filter_result(result: ComparisonResult, selected_types: set[str]) -> Compar
         signal_changes=[c for c in result.signal_changes if c.change_type in selected_types],
         file_pairs=result.file_pairs,
     )
+
+
+class NoWheelComboBox(QComboBox):
+    """QComboBox that ignores wheel events.
+
+    Used inside the manual-pairing table: scrolling the table must not
+    silently change a pairing, and the ignored event lets the table scroll.
+    """
+
+    def wheelEvent(self, event) -> None:
+        event.ignore()
 
 
 class DropLineEdit(QLineEdit):
@@ -212,56 +260,272 @@ class DropLineEdit(QLineEdit):
 
 class CompareWorker(QThread):
     log = Signal(str)
-    completed = Signal(object, object)
+    compared = Signal(object)
     failed = Signal(str)
 
     def __init__(
         self,
         old_folder: Path,
         new_folder: Path,
-        output_path: Path,
-        selected_types: set[str] | None = None,
+        pair_map: dict[str, str | None] | None = None,
     ) -> None:
         super().__init__()
         self.old_folder = old_folder
         self.new_folder = new_folder
-        self.output_path = output_path
-        self.selected_types: set[str] = selected_types or set()
+        self.pair_map = pair_map
 
     def run(self) -> None:
         try:
             self.log.emit("Discovering and parsing DBC files...")
-            result = DbcComparator().compare_folders(
-                self.old_folder,
-                self.new_folder,
-                progress_callback=lambda msg: self.log.emit(msg),
-            )
-            if self.selected_types:
-                result = _filter_result(result, self.selected_types)
-            self.log.emit("Writing Excel report...")
-            write_excel_report(result, self.output_path)
-            self.completed.emit(self.output_path, result.summary())
+            comparator = DbcComparator()
+            if self.pair_map is None:
+                result = comparator.compare_folders(
+                    self.old_folder,
+                    self.new_folder,
+                    progress_callback=lambda msg: self.log.emit(msg),
+                )
+            else:
+                result = comparator.compare_manual(
+                    self.old_folder,
+                    self.new_folder,
+                    self.pair_map,
+                    progress_callback=lambda msg: self.log.emit(msg),
+                )
+            self.compared.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+class ExportWorker(QThread):
+    log = Signal(str)
+    completed = Signal(object, object)
+    failed = Signal(str)
+
+    def __init__(self, result: ComparisonResult, output_path: Path) -> None:
+        super().__init__()
+        self.result = result
+        self.output_path = output_path
+
+    def run(self) -> None:
+        try:
+            self.log.emit("Writing Excel report...")
+            write_excel_report(self.result, self.output_path)
+            self.completed.emit(self.output_path, self.result.summary())
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
+class ManualPairingDialog(QDialog):
+    """Lets the user choose which new-baseline file each old-baseline file pairs with.
+
+    The chosen pairing is returned via pair_map() after Save.
+    """
+
+    def __init__(
+        self,
+        parent,
+        old_folder: Path,
+        new_folder: Path,
+        previous: dict[str, str | None] | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Manual DBC Pairing")
+        self.resize(780, 520)
+        self._pair_map: dict[str, str | None] = {}
+
+        old_files = sorted(collect_dbc_files(old_folder))
+        new_files = sorted(collect_dbc_files(new_folder))
+
+        layout = QVBoxLayout(self)
+        hint = QLabel(
+            "Pick the new-baseline file for each old-baseline file. Old files set to "
+            "\"— Removed (no pair) —\" are reported as removed; new files not selected "
+            "in any pair are reported as added."
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        counts = QLabel(f"{len(old_files)} old file(s)  ·  {len(new_files)} new file(s)")
+        counts.setObjectName("hintLabel")
+        layout.addWidget(counts)
+
+        self.table = QTableWidget(len(old_files), 2)
+        self.table.setHorizontalHeaderLabels(["Old Baseline DBC", "New Baseline DBC"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+
+        for row, old_rel in enumerate(old_files):
+            old_item = QTableWidgetItem(old_rel)
+            old_item.setToolTip(old_rel)
+            self.table.setItem(row, 0, old_item)
+
+            combo = NoWheelComboBox()
+            combo.addItem("— Removed (no pair) —", None)
+            for new_rel in new_files:
+                combo.addItem(new_rel, new_rel)
+            # Restore the previously saved choice; otherwise default to the
+            # same relative path, mirroring auto pairing.
+            if previous is not None and old_rel in previous:
+                target = previous[old_rel]
+            elif old_rel in new_files:
+                target = old_rel
+            else:
+                target = None
+            if target is not None and target in new_files:
+                combo.setCurrentIndex(1 + new_files.index(target))
+            self.table.setCellWidget(row, 1, combo)
+
+        layout.addWidget(self.table)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_save)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _on_save(self) -> None:
+        pair_map: dict[str, str | None] = {}
+        used_new: dict[str, str] = {}
+        duplicates: list[str] = []
+        for row in range(self.table.rowCount()):
+            old_rel = self.table.item(row, 0).text()
+            new_rel = self.table.cellWidget(row, 1).currentData()
+            pair_map[old_rel] = new_rel
+            if new_rel:
+                if new_rel in used_new:
+                    duplicates.append(f"{new_rel} (paired with {used_new[new_rel]} and {old_rel})")
+                else:
+                    used_new[new_rel] = old_rel
+        if duplicates:
+            QMessageBox.warning(
+                self,
+                "Duplicate Pairing",
+                "Each new DBC file can only be paired once:\n" + "\n".join(duplicates),
+            )
+            return
+        self._pair_map = pair_map
+        self.accept()
+
+    def pair_map(self) -> dict[str, str | None]:
+        return dict(self._pair_map)
+
+
+class RenameReviewDialog(QDialog):
+    """Lets the user accept or reject each auto-detected signal rename.
+
+    Rejected renames are exported as a Removed + Added pair instead.
+    """
+
+    def __init__(self, parent, renames: list[Change]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Review Renamed Signals")
+        self.resize(880, 480)
+
+        layout = QVBoxLayout(self)
+        hint = QLabel(
+            "Uncheck a row to reject the rename — it will be reported as a "
+            "Removed + Added signal in the Excel report. Hover a row for details."
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        headers = ["Accept", "DBC File", "Message", "Old Signal", "New Signal", "Confidence", "Level"]
+        self.table = QTableWidget(len(renames), len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+
+        for row, change in enumerate(renames):
+            accept_item = QTableWidgetItem()
+            accept_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            accept_item.setCheckState(Qt.CheckState.Checked)
+            confidence = "" if change.confidence is None else f"{change.confidence:.2f}"
+            cells = [
+                accept_item,
+                QTableWidgetItem(change.dbc_file),
+                QTableWidgetItem(change.parent_message),
+                QTableWidgetItem(change.old_name),
+                QTableWidgetItem(change.new_name),
+                QTableWidgetItem(confidence),
+                QTableWidgetItem(change.confidence_level),
+            ]
+            for col, item in enumerate(cells):
+                if change.description:
+                    item.setToolTip(change.description)
+                self.table.setItem(row, col, item)
+
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setStretchLastSection(False)
+        layout.addWidget(self.table)
+
+        accept_all = QPushButton("Accept All")
+        reject_all = QPushButton("Reject All")
+        accept_all.clicked.connect(lambda: self._set_all(Qt.CheckState.Checked))
+        reject_all.clicked.connect(lambda: self._set_all(Qt.CheckState.Unchecked))
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        button_row = QHBoxLayout()
+        button_row.addWidget(accept_all)
+        button_row.addWidget(reject_all)
+        button_row.addStretch()
+        button_row.addWidget(buttons)
+        layout.addLayout(button_row)
+
+    def _set_all(self, state: Qt.CheckState) -> None:
+        for row in range(self.table.rowCount()):
+            self.table.item(row, 0).setCheckState(state)
+
+    def rejected_indices(self) -> set[int]:
+        return {
+            row
+            for row in range(self.table.rowCount())
+            if self.table.item(row, 0).checkState() != Qt.CheckState.Checked
+        }
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("DBC Compare Tool")
-        self.resize(860, 660)
+        self.resize(880, 660)
         self.setMinimumSize(700, 500)
         self.worker: CompareWorker | None = None
+        self.export_worker: ExportWorker | None = None
+        self._pending_output_path: Path | None = None
         self.last_report: Path | None = None
         self._settings = QSettings("DbcCompareTool", "DBCCompareTool")
 
         self.old_input = DropLineEdit()
         self.new_input = DropLineEdit()
         self.output_input = QLineEdit(str(Path.cwd() / "dbc_compare_report.xlsx"))
-        self.run_button = QPushButton("Run Comparison")
+        self.run_auto_button = QPushButton("Run Auto Compare")
+        self.run_manual_button = QPushButton("Run Manual Compare")
+        self.manual_pair_button = QPushButton("Manual Pairing…")
         self.open_button = QPushButton("Open Report")
         self.progress = QProgressBar()
         self.log_view = QTextEdit()
+
+        # Manual pairing saved from the Manual Pairing dialog, plus the folder
+        # inputs it was built for; invalidated when either folder changes.
+        self._saved_pair_map: dict[str, str | None] | None = None
+        self._saved_pair_folders: tuple[str, str] | None = None
 
         # Filter checkboxes
         self.chk_added = QCheckBox("Added")
@@ -270,6 +534,9 @@ class MainWindow(QMainWindow):
         self.chk_renamed = QCheckBox("Renamed")
         for chk in (self.chk_added, self.chk_removed, self.chk_modified, self.chk_renamed):
             chk.setChecked(True)
+
+        # Manual runs always review detected signal renames before export.
+        self._review_renames_this_run = False
 
         self._build_menu()
         self._build_layout()
@@ -344,10 +611,22 @@ class MainWindow(QMainWindow):
         filter_layout.addStretch()
 
         # Action buttons
-        self.run_button.setObjectName("primaryButton")
+        self.run_auto_button.setObjectName("primaryButton")
+        self.run_auto_button.setToolTip(
+            "Pair DBC files automatically by relative path and content similarity, then compare."
+        )
+        self.run_manual_button.setToolTip(
+            "Compare using the saved manual pairing (or auto pairing if none is saved), "
+            "then review each detected signal rename before the report is written."
+        )
+        self.manual_pair_button.setToolTip(
+            "Choose which new-baseline file each old-baseline file is compared against."
+        )
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
-        buttons.addWidget(self.run_button)
+        buttons.addWidget(self.run_auto_button)
+        buttons.addWidget(self.run_manual_button)
+        buttons.addWidget(self.manual_pair_button)
         buttons.addWidget(self.open_button)
         buttons.addStretch()
 
@@ -388,8 +667,49 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(splitter)
 
     def _wire_events(self) -> None:
-        self.run_button.clicked.connect(self._run_comparison)
+        self.run_auto_button.clicked.connect(self._run_auto)
+        self.run_manual_button.clicked.connect(self._run_manual)
+        self.manual_pair_button.clicked.connect(self._open_manual_pairing)
         self.open_button.clicked.connect(self._open_report)
+        self.old_input.textChanged.connect(self._invalidate_saved_pairing)
+        self.new_input.textChanged.connect(self._invalidate_saved_pairing)
+
+    def _current_folder_inputs(self) -> tuple[str, str]:
+        return (self.old_input.text().strip(), self.new_input.text().strip())
+
+    def _invalidate_saved_pairing(self) -> None:
+        if self._saved_pair_folders and self._saved_pair_folders != self._current_folder_inputs():
+            self._saved_pair_map = None
+            self._saved_pair_folders = None
+            self._log("Baseline folder changed — saved manual pairing discarded.")
+
+    def _open_manual_pairing(self) -> bool:
+        """Open the pairing dialog; returns True if a pairing was saved."""
+        old_text, new_text = self._current_folder_inputs()
+        # Guard empty text explicitly: Path("") is ".", which is_dir() accepts.
+        if not old_text or not new_text or not Path(old_text).is_dir() or not Path(new_text).is_dir():
+            QMessageBox.warning(self, "Invalid Input", "Select valid old and new baseline folders first.")
+            return False
+        old_folder = Path(old_text)
+        new_folder = Path(new_text)
+
+        previous = self._saved_pair_map if self._saved_pair_folders == self._current_folder_inputs() else None
+        try:
+            dialog = ManualPairingDialog(self, old_folder, new_folder, previous=previous)
+        except OSError as exc:
+            QMessageBox.critical(self, "Load Failed", f"Unable to scan folders: {exc}")
+            return False
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+
+        self._saved_pair_map = dialog.pair_map()
+        self._saved_pair_folders = self._current_folder_inputs()
+        paired = sum(1 for new_rel in self._saved_pair_map.values() if new_rel)
+        removed = len(self._saved_pair_map) - paired
+        self._log(f"Manual pairing saved: {paired} pair(s), {removed} old file(s) marked removed.")
+        self.statusBar().showMessage("Manual pairing saved — click Run Manual Compare to use it")
+        return True
 
     def _choose_folder(self, target: QLineEdit) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Select Baseline Folder")
@@ -418,13 +738,27 @@ class MainWindow(QMainWindow):
             types.add("Possible Rename")
         return types
 
-    def _run_comparison(self) -> None:
-        old_folder = Path(self.old_input.text().strip())
-        new_folder = Path(self.new_input.text().strip())
+    def _run_auto(self) -> None:
+        self._start_compare(pair_map=None, review_renames=False)
+
+    def _run_manual(self) -> None:
+        # Use the saved manual pairing when available; otherwise fall back to
+        # auto pairing. Either way, signal renames are reviewed before export.
+        if self._saved_pair_map is not None and self._saved_pair_folders == self._current_folder_inputs():
+            pair_map = self._saved_pair_map
+        else:
+            pair_map = None
+        self._start_compare(pair_map=pair_map, review_renames=True)
+
+    def _start_compare(self, pair_map: dict[str, str | None] | None, review_renames: bool) -> None:
+        old_text, new_text = self._current_folder_inputs()
         output_path = Path(self.output_input.text().strip())
-        if not old_folder.is_dir() or not new_folder.is_dir():
+        # Guard empty text explicitly: Path("") is ".", which is_dir() accepts.
+        if not old_text or not new_text or not Path(old_text).is_dir() or not Path(new_text).is_dir():
             QMessageBox.warning(self, "Invalid Input", "Select valid old and new baseline folders.")
             return
+        old_folder = Path(old_text)
+        new_folder = Path(new_text)
         if output_path.suffix.lower() != ".xlsx":
             QMessageBox.warning(self, "Invalid Output", "Report path must end with .xlsx.")
             return
@@ -434,16 +768,52 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Filter Selected", "Select at least one change type to include.")
             return
 
+        self._pending_output_path = output_path
+        self._review_renames_this_run = review_renames
         self.log_view.clear()
-        self._log("Starting comparison...")
+        pairing = "manual pairing" if pair_map is not None else "auto pairing"
+        review = ", rename review" if review_renames else ""
+        self._log(f"Starting comparison ({pairing}{review})...")
         self.progress.setRange(0, 0)
-        self.run_button.setEnabled(False)
+        self._set_actions_enabled(False)
         self.open_button.setEnabled(False)
-        self.worker = CompareWorker(old_folder, new_folder, output_path, selected)
+        self.worker = CompareWorker(old_folder, new_folder, pair_map)
         self.worker.log.connect(self._log)
-        self.worker.completed.connect(self._completed)
+        self.worker.compared.connect(self._on_compared)
         self.worker.failed.connect(self._failed)
         self.worker.start()
+
+    def _set_actions_enabled(self, enabled: bool) -> None:
+        self.run_auto_button.setEnabled(enabled)
+        self.run_manual_button.setEnabled(enabled)
+        self.manual_pair_button.setEnabled(enabled)
+
+    def _on_compared(self, result: ComparisonResult) -> None:
+        if self._review_renames_this_run:
+            renames = [c for c in result.signal_changes if c.change_type == "Renamed"]
+            if renames:
+                dialog = RenameReviewDialog(self, renames)
+                if dialog.exec() == QDialog.DialogCode.Accepted:
+                    rejected = dialog.rejected_indices()
+                    if rejected:
+                        result = reject_signal_renames(result, rejected)
+                        self._log(
+                            f"Rename review: {len(rejected)} of {len(renames)} signal rename(s) "
+                            "rejected — exported as Removed + Added."
+                        )
+                    else:
+                        self._log(f"Rename review: all {len(renames)} signal rename(s) accepted.")
+                else:
+                    self._log("Rename review cancelled — keeping all detected renames.")
+            else:
+                self._log("Rename review: no renamed signals detected.")
+
+        result = _filter_result(result, self._selected_change_types())
+        self.export_worker = ExportWorker(result, self._pending_output_path)
+        self.export_worker.log.connect(self._log)
+        self.export_worker.completed.connect(self._completed)
+        self.export_worker.failed.connect(self._failed)
+        self.export_worker.start()
 
     def _restore_paths(self) -> None:
         if val := self._settings.value("last_old_folder"):
@@ -461,7 +831,7 @@ class MainWindow(QMainWindow):
     def _completed(self, report_path: Path, summary: dict) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
-        self.run_button.setEnabled(True)
+        self._set_actions_enabled(True)
         self.open_button.setEnabled(True)
         self.last_report = report_path
         self._log(f"Report generated: {report_path}")
@@ -475,7 +845,7 @@ class MainWindow(QMainWindow):
     def _failed(self, message: str) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.run_button.setEnabled(True)
+        self._set_actions_enabled(True)
         self._log(f"Failed: {message}")
         self.statusBar().showMessage("Failed — see log for details")
         QMessageBox.critical(self, "Comparison Failed", message)
@@ -489,7 +859,8 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event) -> None:
-        if self.worker and self.worker.isRunning():
+        running = [w for w in (self.worker, self.export_worker) if w and w.isRunning()]
+        if running:
             reply = QMessageBox.question(
                 self,
                 "Comparison Running",
@@ -500,13 +871,12 @@ class MainWindow(QMainWindow):
             if reply != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-            # Detach signals, then stop the thread before Qt destroys it,
+            # Detach signals, then stop the threads before Qt destroys them,
             # otherwise the app crashes with "QThread destroyed while running".
-            self.worker.log.disconnect()
-            self.worker.completed.disconnect()
-            self.worker.failed.disconnect()
-            self.worker.terminate()
-            self.worker.wait(3000)
+            for worker in running:
+                worker.disconnect()
+                worker.terminate()
+                worker.wait(3000)
         event.accept()
 
     def _show_help_document(self, title: str, filename: str) -> None:
