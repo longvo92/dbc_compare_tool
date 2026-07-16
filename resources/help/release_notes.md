@@ -1,5 +1,14 @@
 # DBC Compare Tool - Release Notes
 
+## Version 0.1.8
+
+### Added
+
+- **Manual DBC pairing**: a new **Manual Pairing…** dialog lets you pick the new-baseline file for each old-baseline file yourself, then **Save** the pairing. Unpaired old files are reported as removed; unselected new files as added. Manually matched pairs appear as **Manually Paired** on the DBC Overview sheet.
+- **Separate run buttons**: **Run Auto Compare** pairs files automatically by relative path and content similarity (as before); **Run Manual Compare** uses your saved manual pairing (or automatic pairing if none is saved) and adds the signal-rename review step.
+- **Review renamed signals before export**: after a manual-compare run finishes, a review dialog lists every auto-detected signal rename with its confidence. Uncheck a row to reject the rename — it is then exported as a **Removed + Added** pair instead. **Run Auto Compare** keeps the fully automatic behavior.
+
+---
 ## Version 0.1.7
 
 ### Added
