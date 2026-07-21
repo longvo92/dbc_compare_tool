@@ -1,20 +1,45 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dbc-compare-tool"
 version = "0.1.8"
-description = "Desktop DBC baseline comparison tool with Excel reporting"
+description = "Compare CAN DBC baseline folders and generate an engineering-grade Excel change report"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Long Vo Thien" }]
+keywords = ["dbc", "can", "can-bus", "automotive", "cantools", "diff", "baseline", "excel", "report"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Embedded Systems",
+]
 dependencies = [
     "cantools>=40.3.0",
     "openpyxl>=3.1.0",
     "PySide6>=6.7.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/longvo92/dbc_compare_tool"
+Issues = "https://github.com/longvo92/dbc_compare_tool/issues"
+Changelog = "https://github.com/longvo92/dbc_compare_tool/blob/main/resources/help/release_notes.md"
+
+[project.scripts]
+dbc-compare-tool = "dbc_compare_tool.cli:main"
+
+[project.gui-scripts]
+dbc-compare-tool-gui = "dbc_compare_tool.ui.main_window:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

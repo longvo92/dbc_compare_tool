@@ -1,5 +1,6 @@
 # DBC Compare Tool
 
+[![Test](https://github.com/longvo92/dbc_compare_tool/actions/workflows/test.yml/badge.svg)](https://github.com/longvo92/dbc_compare_tool/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#requirements)
@@ -9,6 +10,14 @@ Desktop utility for comparing Automotive CAN DBC baseline folders and generating
 Point it at an old baseline folder and a new one; it discovers every `.dbc` file, pairs the files (even renamed ones), detects added / removed / modified / renamed messages and signals, and writes a single multi-sheet `.xlsx` report.
 
 ![DBC Compare Tool main window](docs/screenshot_main.png)
+
+- [Features](#features)
+- [Report layout](#report-layout)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Usage](#usage)
+- [Development](#development)
+- [Documentation](#documentation)
 
 ## Features
 
@@ -23,7 +32,7 @@ Point it at an old baseline folder and a new one; it discovers every `.dbc` file
 - **Robust parsing** — an unparsable DBC is flagged `Parse Error` and the rest of the comparison continues; unusual encodings (UTF-8 with/without BOM, CANdb++ default) are handled.
 - **CLI mode** — same comparison engine, scriptable for CI or batch runs.
 
-## Report Layout
+## Report layout
 
 One Excel workbook, five sheets:
 
@@ -45,6 +54,10 @@ Rows are color-coded by change type (green = Added, salmon = Removed, yellow = M
 
 ## Install
 
+Ready-to-run builds are attached to each [release](https://github.com/longvo92/dbc_compare_tool/releases) — download the one-file `.exe` and nothing needs to be installed on the machine.
+
+From source:
+
 ```powershell
 git clone https://github.com/longvo92/dbc_compare_tool.git
 cd dbc_compare_tool
@@ -53,7 +66,7 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 ```
 
-The `-e .` step is required: the package lives under `src/`, so `python -m dbc_compare_tool` only resolves after an editable install.
+The `-e .` step is required: the package lives under `src/`, so `python -m dbc_compare_tool` only resolves after an editable install. It also installs two commands on the `PATH` of the environment: `dbc-compare-tool` (CLI) and `dbc-compare-tool-gui` (desktop app).
 
 ## Usage
 
@@ -82,6 +95,8 @@ Run the test suite:
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
+
+CI runs the same suite on Linux and Windows against Python 3.10 and 3.12, plus a CLI comparison of the bundled example baselines. The comparison engine has no UI dependency, so those runs install `cantools` and `openpyxl` only.
 
 Build distributables (zipapp and/or one-file `.exe`):
 
@@ -114,9 +129,13 @@ The comparison engine has no UI dependency. See [docs/architecture.md](docs/arch
 - [Release Notes](resources/help/release_notes.md) — full changelog
 - [Architecture](docs/architecture.md) — layers, rename strategy, roadmap
 
-## Version
+## Contributing
 
-Current version: 0.1.8.
+Issues and pull requests are welcome. Please add a test under `tests/` for any change to the comparison or rename-detection logic, and keep the engine free of UI imports so it stays usable from the CLI and CI.
+
+## Author
+
+**Long Vo Thien**
 
 ## License
 
