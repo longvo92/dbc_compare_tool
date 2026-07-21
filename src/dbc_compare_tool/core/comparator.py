@@ -593,6 +593,22 @@ def reject_signal_renames(result: ComparisonResult, rejected_indices: set[int]) 
     )
 
 
+def filter_result(result: ComparisonResult, selected_types: set[str]) -> ComparisonResult:
+    """Keep only the change types the user asked for.
+
+    An empty selection means "no filter" and returns the result unchanged.
+    File pairs are always preserved so the DBC Overview sheet still lists
+    every compared file, including the ones whose changes were filtered out.
+    """
+    if not selected_types:
+        return result
+    return ComparisonResult(
+        message_changes=[c for c in result.message_changes if c.change_type in selected_types],
+        signal_changes=[c for c in result.signal_changes if c.change_type in selected_types],
+        file_pairs=result.file_pairs,
+    )
+
+
 def _get_property_diffs(
     old: dict[str, object], new: dict[str, object]
 ) -> tuple[tuple[str, str, str], ...]:

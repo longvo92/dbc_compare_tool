@@ -3,7 +3,7 @@
 import unittest
 from pathlib import Path
 
-from dbc_compare_tool.core.comparator import DbcComparator
+from dbc_compare_tool.core.comparator import DbcComparator, filter_result
 from dbc_compare_tool.core.models import ComparisonResult
 
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
@@ -85,9 +85,8 @@ class TestCompareFolders(unittest.TestCase):
 
 class TestCompareWithFilter(unittest.TestCase):
     def test_filter_preserves_file_pairs(self):
-        from dbc_compare_tool.ui.main_window import _filter_result
         result = DbcComparator().compare_folders(_OLD_FOLDER, _NEW_FOLDER)
-        filtered = _filter_result(result, {"Added"})
+        filtered = filter_result(result, {"Added"})
         self.assertEqual(filtered.file_pairs, result.file_pairs)
 
 
