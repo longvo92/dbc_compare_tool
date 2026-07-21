@@ -6,7 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "dbc-compare-tool"
 version = "0.1.8"
 description = "Desktop DBC baseline comparison tool with Excel reporting"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Long Vo Thien" }]
 dependencies = [
     "cantools>=41.4.0",
     "openpyxl>=3.1.0",
