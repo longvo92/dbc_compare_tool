@@ -1,6 +1,6 @@
 # DBC Compare Tool
 
-[![Test](https://github.com/longvo92/dbc_compare_tool/actions/workflows/test.yml/badge.svg)](https://github.com/longvo92/dbc_compare_tool/actions/workflows/test.yml)
+[![Test](https://github.com/longvo92/dbc-compare-tool/actions/workflows/test.yml/badge.svg)](https://github.com/longvo92/dbc-compare-tool/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#requirements)
@@ -54,13 +54,13 @@ Rows are color-coded by change type (green = Added, salmon = Removed, yellow = M
 
 ## Install
 
-Ready-to-run builds are attached to each [release](https://github.com/longvo92/dbc_compare_tool/releases) — download the one-file `.exe` and nothing needs to be installed on the machine.
+Ready-to-run builds are attached to each [release](https://github.com/longvo92/dbc-compare-tool/releases) — download the one-file `.exe` and nothing needs to be installed on the machine.
 
 From source:
 
 ```powershell
-git clone https://github.com/longvo92/dbc_compare_tool.git
-cd dbc_compare_tool
+git clone https://github.com/longvo92/dbc-compare-tool.git
+cd dbc-compare-tool
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pip install -e .
