@@ -44,16 +44,39 @@ DBC file pairing prioritizes:
 
 Message rename detection prefers normalized frame ID equality; when frame ID also changes, unmatched messages fall back to `MessageRenameDetector` structural scoring (threshold 0.60). Signal rename detection uses greedy one-to-one matching over exact bit-layout candidates within the same frame ID, then falls back to `SignalRenameDetector` scoring for the rest.
 
+## Validation Status
+
+The tool has been exercised against real project DBC baselines of several kinds, not only the
+bundled examples. The rename thresholds held up on that material and were **not** changed as a
+result: `MessageRenameDetector` stays at 0.60 and DBC file pairing at `FILE_RENAME_THRESHOLD = 0.55`.
+Treat those numbers as field-confirmed defaults rather than initial guesses.
+
+What that field testing did **not** cover yet — these remain unvalidated outside the unit suite:
+
+| Area | Status |
+|---|---|
+| CAN FD databases | Not exercised on real baselines |
+| Extended / mixed frame IDs | Unit-tested only (`TestExtendedStandardFrameCollision` covers a standard frame hidden by an extended twin) |
+| Multiplexed signals | Parsed and carried through comparison, but not exercised on real multiplexed baselines |
+| Vendor attributes (`BA_`) beyond cycle time, very large databases | Not exercised |
+
 ## Known Risks
 
-- Project-specific attributes beyond cycle time may need to be added to reports if engineers want them surfaced.
-- CAN FD handling may need project-specific interpretation.
-- DBC file rename pairing thresholds may need calibration against real release history.
-- `MessageRenameDetector` threshold (0.60) trades off false positives vs. missed CAN-ID-changed renames; may need recalibration against real release history.
+- `BA_` attributes other than cycle time are not read at all (`parser.py` takes `cycle_time` from
+  cantools and nothing else), so a project that encodes meaning in custom attributes will see no
+  diff for them. Surfacing one means extending the parser, the models, and the Property Diff sheet.
+- CAN FD handling may still need project-specific interpretation — see the table above.
+- The rename thresholds are a deliberate trade-off: at 0.60, `MessageRenameDetector` favours missing
+  a CAN-ID-changed rename (reported as Removed + Added) over inventing a wrong one. Field use has not
+  shown a reason to move it, but a project with heavy simultaneous ID-and-name churn may want it lower.
+- Rename review in the UI is the intended safety net for the above: a detected rename can always be
+  rejected before export, but a *missed* rename has no equivalent "merge these two" affordance.
 
 ## Incremental Roadmap
 
 1. Core parser, comparison, rename detection, and Excel report. *(done)*
 2. Desktop UI workflow. *(done)*
 3. Message rename detection for CAN-ID changes, and value table/comment comparison. *(done)*
-4. Real-project calibration tests using anonymized DBC baselines.
+4. Real-project validation of the rename thresholds. *(done — thresholds unchanged)*
+5. Coverage for the gaps listed under Validation Status, starting with CAN FD and multiplexed
+   baselines.
