@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from dbc_compare_tool import __version__
-from dbc_compare_tool.core.comparator import DbcComparator, reject_signal_renames
+from dbc_compare_tool.core.comparator import DbcComparator, filter_result, reject_signal_renames
 from dbc_compare_tool.core.discovery import collect_dbc_files
 from dbc_compare_tool.core.models import Change, ComparisonResult
 from dbc_compare_tool.report.excel import write_excel_report
@@ -212,16 +212,6 @@ QLabel#hintLabel {
 
 def _read_resource_text(filename: str) -> str:
     return _resource_path(filename).read_text(encoding="utf-8")
-
-
-def _filter_result(result: ComparisonResult, selected_types: set[str]) -> ComparisonResult:
-    if not selected_types:
-        return result
-    return ComparisonResult(
-        message_changes=[c for c in result.message_changes if c.change_type in selected_types],
-        signal_changes=[c for c in result.signal_changes if c.change_type in selected_types],
-        file_pairs=result.file_pairs,
-    )
 
 
 class NoWheelComboBox(QComboBox):
@@ -808,7 +798,7 @@ class MainWindow(QMainWindow):
             else:
                 self._log("Rename review: no renamed signals detected.")
 
-        result = _filter_result(result, self._selected_change_types())
+        result = filter_result(result, self._selected_change_types())
         self.export_worker = ExportWorker(result, self._pending_output_path)
         self.export_worker.log.connect(self._log)
         self.export_worker.completed.connect(self._completed)
