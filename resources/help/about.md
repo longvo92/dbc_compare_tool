@@ -6,7 +6,7 @@ DBC Compare Tool
 
 ## Author
 
-LongVT23
+Long Vo Thien
 
 ## Description
 

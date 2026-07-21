@@ -18,8 +18,8 @@ The Excel report contains the following sheets:
 
 * **Summary** — total change counts by category, with report title and generation time.
 * **DBC Overview** — one row per DBC file pair: pairing status (`Matched` / `DBC Added` / `DBC Removed` / `DBC Renamed` / `Manually Paired` / `Parse Error`), pairing confidence, and message/signal counts for both baselines.
-* **Message Changes** — every added, removed, modified, or renamed message.
-* **Signal Changes** — every added, removed, modified, or renamed signal.
+* **Message Details** — every added, removed, modified, or renamed message.
+* **Signal Details** — every added, removed, modified, or renamed signal.
 * **Property Diff** — before/after table for every changed property, one row per property. Old values highlighted in salmon, new values in green.
 
 Rows are color-coded by change type: green = Added, salmon = Removed, yellow = Modified, blue = Renamed. CAN IDs are shown in hexadecimal (e.g. `0x1A3`).
