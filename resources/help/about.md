@@ -17,7 +17,7 @@ Key capabilities:
 * Automatic DBC file matching, including renamed DBC files.
 * Message rename detection using CAN layout and message attributes.
 * Signal rename detection using signal layout and technical properties.
-* Detailed change tracking for Added, Removed, Modified, Renamed, and Possible Rename items.
+* Detailed change tracking for Added, Removed, Modified, and Renamed items, with a confidence level on every detected rename.
 
 ## Version
 

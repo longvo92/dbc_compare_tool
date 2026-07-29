@@ -15,13 +15,15 @@ This project is a local Windows desktop application for automotive engineers com
    - Discovers `.dbc` files in old and new baseline folders.
    - Compares files with the same relative path first.
    - Pairs old-only and new-only `.dbc` files by CAN ID overlap and message-layout similarity.
-   - Matches messages by frame ID first; still-unmatched messages run through structural rename detection before being treated as added/removed.
+   - Matches messages by frame key first; still-unmatched messages run through structural rename detection before being treated as added/removed.
    - Compares value tables and comments as regular properties, surfaced in change descriptions and the Property Diff sheet.
+   - Accepts a caller-supplied pairing map (`compare_manual`) as an alternative to automatic file pairing.
+   - Owns the two post-processing passes over a finished result: `filter_result` (keep only the requested change types, file pairs always preserved) and `reject_signal_renames` (turn a rename the user rejected back into a Removed + Added pair). Both live in the engine so the CLI and tests can reach them without importing the UI.
 
 3. Rename Detection Engine
-   - Messages with the same normalized frame ID and a different name are exact renames (confidence 1.0).
-   - Messages whose frame ID also changed are matched via `MessageRenameDetector`, a structural scorer over DLC, transmitter, cycle time, signal count, and signal-layout overlap (name similarity is minor supporting evidence).
-   - Signal renames require the same frame ID; unmatched signals are scored the same way via `SignalRenameDetector`, with a relaxed name-driven mode for Event Matrix-style messages.
+   - Messages with the same frame key and a different name are exact renames (confidence 1.0).
+   - Messages whose frame key also changed are matched via `MessageRenameDetector`, a structural scorer over DLC, transmitter, cycle time, signal count, and signal-layout overlap (name similarity is minor supporting evidence).
+   - Signals are compared inside an already-matched message pair — which includes a pair matched by message rename, so the two messages may carry different CAN IDs. Signals left over after exact-name matching are scored via `SignalRenameDetector`, with a relaxed name-driven mode for Event Matrix-style messages.
    - DBC file pairing still uses deterministic structural scoring so renamed `.dbc` files can be compared.
 
 4. Report Generator
@@ -33,6 +35,54 @@ This project is a local Windows desktop application for automotive engineers com
    - Runs comparison on a worker thread to keep the UI responsive.
    - Persists last-used folder paths via `QSettings("DbcCompareTool", "DBCCompareTool")` (Windows registry).
 
+The dependency direction is one-way: `ui` and `cli` both import `core` and `report`, and nothing
+under `core` or `report` imports either of them. That is what lets CI run the full comparison with
+`cantools` and `openpyxl` installed but no `PySide6`.
+
+## Entry Points
+
+| Entry point | Module | Notes |
+|---|---|---|
+| `dbc-compare-tool-gui`, `python -m dbc_compare_tool` | `ui/main_window.py` | Desktop app; `__main__.py` forwards to the UI |
+| `dbc-compare-tool`, `python -m dbc_compare_tool.cli` | `cli.py` | `--old`, `--new`, `--out` all required; exit `0` ok, `1` parse/write failure, `2` bad arguments |
+
+The CLI always uses automatic pairing and keeps every detected rename; manual pairing and rename
+review are UI-only workflows built on the same engine calls.
+
+## Data Flow
+
+```mermaid
+flowchart TD
+    A[old + new baseline folders] --> B[discovery.discover_dbc_pairs<br/>rglob, case-insensitive .dbc]
+    B --> C{same relative path?}
+    C -->|yes| P1[parse both files]
+    C -->|no| P2[parse, hold as old-only / new-only]
+    P1 -.parse error.-> X[Parse Error row<br/>remaining files continue]
+    P2 -.parse error.-> X
+    P2 --> E[_match_renamed_databases<br/>_score_database_pair ≥ 0.55]
+    P1 --> D[compare_databases]
+    E -->|paired| D
+    E -->|unpaired| U[compare_databases against an empty database<br/>DBC Added / DBC Removed]
+    D --> H[match messages by frame key]
+    H -->|leftover| I[MessageRenameDetector ≥ 0.60]
+    H --> J[compare signals per matched message pair]
+    I --> J
+    J --> K[match signals by exact name]
+    K -->|leftover| L[SignalRenameDetector<br/>0.82, or 0.65 when event-like]
+    L --> M[ComparisonResult<br/>message_changes, signal_changes, file_pairs]
+    J --> M
+    U --> M
+    X --> M
+    M --> N[reject_signal_renames<br/>UI rename review, optional]
+    N --> O[filter_result<br/>selected change types]
+    O --> R[report.excel.write_excel_report<br/>5 sheets]
+```
+
+Two details of that flow are easy to miss. An added or removed `.dbc` still goes through
+`compare_databases`, paired against an empty `DbcDatabase`, which is how all of its messages and
+signals reach the detail sheets instead of only the overview row. And a parse failure is contained
+per file: the file becomes a `Parse Error` row in `file_pairs` and every other file is still compared.
+
 ## Rename Strategy
 
 DBC file pairing prioritizes:
@@ -42,7 +92,13 @@ DBC file pairing prioritizes:
 - Message-name overlap
 - File-name similarity as supporting evidence only
 
-Message rename detection prefers normalized frame ID equality; when frame ID also changes, unmatched messages fall back to `MessageRenameDetector` structural scoring (threshold 0.60). Signal rename detection uses greedy one-to-one matching over exact bit-layout candidates within the same frame ID, then falls back to `SignalRenameDetector` scoring for the rest.
+Message rename detection prefers frame key equality; when the frame key also changes, unmatched messages fall back to `MessageRenameDetector` structural scoring (threshold 0.60).
+
+Signal rename detection matches by **exact name** first. Every signal left unmatched on either side is then scored by `SignalRenameDetector` and resolved with greedy one-to-one matching. There is no separate bit-layout matching pass — bit layout enters the decision only as weighted criteria inside the score. `Signal.signal_key()` (`start_bit`, `length`) is used afterwards, and only to word the report description: a leftover signal whose key still exists on the other side is described as removed/added "after layout/name change" rather than a plain removal or addition.
+
+### Frame key
+
+Throughout the engine a message is identified by its **frame key** — the tuple `(can_id, is_extended_frame)`, not the raw CAN ID. The parser strips the extended-frame flag (`0x80000000`) from the ID it stores, so a standard frame and an extended frame can collapse onto the same number; keeping the flag in the key is what keeps them distinct.
 
 ## Scoring Reference
 
@@ -57,7 +113,8 @@ out at 0.88; that is explained below.
 ### DBC file pairing — `_score_database_pair` (comparator.py)
 
 Applied only to files left over after relative-path matching. Threshold: `FILE_RENAME_THRESHOLD = 0.55`.
-A pair sharing no frame key at all scores 0.0 and is never paired.
+A pair scores 0.0 and is never paired when either database has no messages, or when the two share no
+frame key at all.
 
 | Criterion | Weight | Measure |
 |---|---|---|
@@ -75,6 +132,12 @@ Structure score per shared frame key — `_common_message_structure_score`:
 | Cycle time equal | 0.10 |
 | Signal count equal | 0.15 |
 | Signal-layout Jaccard | 0.40 × overlap |
+
+Note the cycle-time check here is a plain equality test, unlike the one in `MessageRenameDetector`
+below: two messages that both have an *unknown* cycle time count as matching and collect the 0.10.
+That is deliberate for file pairing, where the comparison is over many messages at once and a shared
+absence is still weak evidence of the same file, but it does mean a database with no
+`GenMsgCycleTime` at all scores slightly higher than the criterion suggests.
 
 Signal layout is the set of `(start_bit, length, byte_order)` tuples of a message's signals, compared
 with a Jaccard index (`|A ∩ B| / |A ∪ B|`; two empty sets score 1.0, one empty set scores 0.0).
@@ -96,8 +159,9 @@ already an exact rename with confidence 1.0 and never goes through scoring. Thre
 
 ### Signal rename — `SignalRenameDetector` (rename.py)
 
-Applied per message, to signals left unmatched after exact name and bit-layout matching. Two weight
-sets; the parent message decides which one is used.
+Applied per matched message pair, to the signals left over after exact-name matching. Two weight
+sets; the parent message decides which one is used — the event-like set is selected when *either*
+the old or the new message is event-like.
 
 | Criterion | Normal (threshold **0.82**) | Event-like (threshold **0.65**) |
 |---|---|---|
@@ -162,6 +226,10 @@ What that field testing did **not** cover yet — these remain unvalidated outsi
   shown a reason to move it, but a project with heavy simultaneous ID-and-name churn may want it lower.
 - Rename review in the UI is the intended safety net for the above: a detected rename can always be
   rejected before export, but a *missed* rename has no equivalent "merge these two" affordance.
+- A `Possible Rename` change type is still referenced by `report/excel.py` (row fill colour) and by
+  the UI change-type filter, but no code path in `comparator.py` ever produces it — every rename is
+  emitted as `Renamed` and graded by confidence level instead. The remaining references are dead and
+  should be removed rather than revived; the confidence level already carries that information.
 
 ## Incremental Roadmap
 

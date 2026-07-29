@@ -66,9 +66,14 @@ Rename detection is heuristic, so **Run Manual Compare** lets you double-check i
 
 **Run Auto Compare** skips this step and keeps every detected rename automatically.
 
-### Possible Rename
+### Confidence Levels
 
-For messages containing many structurally similar signals (such as Event Matrix messages), rename detection may be ambiguous. Such cases are reported as **Possible Rename** instead of **Renamed**, so you can review them manually.
+Every detected rename carries a confidence score and a level — **High**, **Medium**, or **Low** — shown in the report and in the rename review dialog. Use it to decide how much of the result needs a second look; anything below High is worth checking.
+
+Two situations lower confidence on purpose:
+
+* **Event Matrix messages** — messages containing many structurally similar signals. There, the technical properties carry almost no information (dozens of signals share them), so the signal name drives the match and confidence never reaches High. Review these rows.
+* **Ambiguous matches** — when several old signals are equally plausible matches for one new signal, all of them are downgraded and the report notes `Ambiguous: ...` in the match reasons.
 
 ### Robust File Handling
 
