@@ -25,7 +25,7 @@ Point it at an old baseline folder and a new one; it discovers every `.dbc` file
 - **DBC file pairing** — matches files by relative path first, then by CAN ID overlap and message-layout similarity, so a renamed `.dbc` is still compared as the same file.
 - **Manual pairing** — a **Manual Pairing…** dialog lets you choose the new-baseline counterpart for each old file when automatic pairing is not what you want.
 - **Message rename detection** — including messages whose CAN ID changed, scored over DLC, transmitter, cycle time, and signal layout.
-- **Signal rename detection** — scored over start bit, length, byte order, signedness, factor/offset, unit, and receivers. Name similarity is supporting evidence only.
+- **Signal rename detection** — scored over start bit, length, byte order, signedness, factor/offset, unit, and receivers, with name similarity as supporting evidence. Event Matrix-style messages, where those properties are identical across dozens of signals, switch to a name-driven mode that can never report High confidence.
 - **Rename review** — **Run Manual Compare** shows every detected signal rename with its confidence before export; reject one and it is reported as Removed + Added instead.
 - **Value tables and comments** — `VAL_` and `CM_` differences are compared for both messages and signals.
 - **Change-type filter** — include only Added / Removed / Modified / Renamed in the report.
@@ -127,7 +127,7 @@ The comparison engine has no UI dependency. See [docs/architecture.md](docs/arch
 
 - [User Guide](resources/help/user_guide.md) — step-by-step usage, also in the app's Help menu
 - [Release Notes](resources/help/release_notes.md) — full changelog
-- [Architecture](docs/architecture.md) — layers, rename strategy, roadmap
+- [Architecture](docs/architecture.md) — layers, data flow, rename scoring weights, validation status
 
 ## Contributing
 

@@ -725,7 +725,6 @@ class MainWindow(QMainWindow):
             types.add("Modified")
         if self.chk_renamed.isChecked():
             types.add("Renamed")
-            types.add("Possible Rename")
         return types
 
     def _run_auto(self) -> None:
