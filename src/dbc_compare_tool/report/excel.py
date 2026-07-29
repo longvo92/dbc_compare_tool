@@ -27,11 +27,10 @@ _HEADER_FG = "FFFFFF"
 
 # Row background color keyed by change_type
 _CHANGE_ROW_FILL: dict[str, str] = {
-    "Added":           "E2EFDA",   # light green
-    "Removed":         "FCE4D6",   # light salmon
-    "Modified":        "FFF2CC",   # light yellow
-    "Renamed":         "DDEBF7",   # light blue
-    "Possible Rename": "EDF7FF",   # very light blue
+    "Added":    "E2EFDA",   # light green
+    "Removed":  "FCE4D6",   # light salmon
+    "Modified": "FFF2CC",   # light yellow
+    "Renamed":  "DDEBF7",   # light blue
 }
 
 # Confidence level cell highlight

@@ -226,10 +226,10 @@ What that field testing did **not** cover yet — these remain unvalidated outsi
   shown a reason to move it, but a project with heavy simultaneous ID-and-name churn may want it lower.
 - Rename review in the UI is the intended safety net for the above: a detected rename can always be
   rejected before export, but a *missed* rename has no equivalent "merge these two" affordance.
-- A `Possible Rename` change type is still referenced by `report/excel.py` (row fill colour) and by
-  the UI change-type filter, but no code path in `comparator.py` ever produces it — every rename is
-  emitted as `Renamed` and graded by confidence level instead. The remaining references are dead and
-  should be removed rather than revived; the confidence level already carries that information.
+- There is exactly one rename change type, `Renamed`, graded by confidence level. An earlier
+  `Possible Rename` type for ambiguous matches was removed once the confidence level made it
+  redundant; do not reintroduce a second change type for uncertainty, since it splits the same
+  information across two columns and every consumer of `change_type` then has to know about both.
 
 ## Incremental Roadmap
 
