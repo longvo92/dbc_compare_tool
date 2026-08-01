@@ -136,7 +136,7 @@ Run the test suite:
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-CI runs the same suite on Linux and Windows against Python 3.10 and 3.12, plus a CLI comparison of the bundled example baselines. The comparison engine has no UI dependency, so those runs install `cantools` and `openpyxl` only.
+CI runs the same suite on Linux and Windows against Python 3.10 and 3.12, plus a CLI comparison of the bundled example baselines. The comparison engine and the report writers have no UI dependency, so those runs install `cantools` and `openpyxl` only — no test imports Qt.
 
 Build distributables (zipapp and/or one-file `.exe`):
 
@@ -144,6 +144,24 @@ Build distributables (zipapp and/or one-file `.exe`):
 .\.venv\Scripts\python.exe scripts\build.py        # both
 .\.venv\Scripts\python.exe scripts\build.py exe    # PyInstaller one-file exe
 ```
+
+### Releasing
+
+Two moves, on purpose.
+
+1. A normal pull request bumps the version in `src/dbc_compare_tool/__init__.py` and `pyproject.toml`, and adds the `## Version X.Y.Z` section at the top of [resources/help/release_notes.md](resources/help/release_notes.md). Check it before pushing:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\release_check.py 0.2.0
+```
+
+2. Once that is merged, trigger the release workflow against `main`. It builds the `.exe` and the zipapp on Windows, runs the suite and the CLI smoke test, and starts both artifacts to catch a bundle that is missing a module:
+
+```bash
+gh workflow run release.yml -f version=0.2.0
+```
+
+That is a rehearsal: it verifies and uploads the artifacts without creating anything permanent. Add `-f publish=true` to tag `v0.2.0` and create the GitHub release. The workflow never edits the repository, and refuses a version that disagrees with the merged files or that was already tagged.
 
 ### Project Structure
 
