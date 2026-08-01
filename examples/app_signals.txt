@@ -1,0 +1,6 @@
+# Signals used by the application software on the ECM node.
+# Import this in the Signal Focus tab and select node "ECM" on both sides.
+VehicleSpeed
+IgnitionState
+EngineRPM
+EngineTemp

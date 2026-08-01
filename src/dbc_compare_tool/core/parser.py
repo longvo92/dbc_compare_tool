@@ -11,6 +11,8 @@ from dbc_compare_tool.core.models import DbcDatabase, Message, Signal
 
 EXTENDED_FRAME_FLAG = 0x80000000
 FRAME_ID_MASK = 0x1FFFFFFF
+# Placeholder CANdb++ writes when a message has no sender or a signal no receiver.
+UNDEFINED_NODE = "Vector__XXX"
 LEGACY_CYCLE_TIME_DEFINITION = 'BA_DEF_ BO_ "GenMsgCycleTime" INT 0 65535;\n'
 
 
@@ -32,7 +34,28 @@ def parse_dbc(path: Path) -> DbcDatabase:
     for cantools_message in getattr(cantools_db, "messages", []):
         message = _map_message(cantools_message)
         database.messages[message.name] = message
+    database.nodes = _collect_nodes(cantools_db, database)
     return database
+
+
+def _collect_nodes(cantools_db: Any, database: DbcDatabase) -> tuple[str, ...]:
+    """ECU nodes of the database, sorted.
+
+    Prefer the BU_ list. Plenty of hand-written or tool-trimmed DBC files
+    omit it (cantools then reports no nodes at all), so fall back to every
+    node actually referenced as a sender or a receiver.
+    """
+    declared = [node.name for node in (getattr(cantools_db, "nodes", None) or ())]
+    if declared:
+        return tuple(sorted(set(declared)))
+
+    referenced: set[str] = set()
+    for message in database.messages.values():
+        referenced.update(message.senders)
+        for signal in message.signals.values():
+            referenced.update(signal.receivers)
+    referenced.discard(UNDEFINED_NODE)
+    return tuple(sorted(referenced))
 
 
 def _load_cantools_database(path: Path) -> Any:
@@ -78,6 +101,7 @@ def _map_message(cantools_message: Any) -> Message:
         is_extended_frame=bool(cantools_message.is_extended_frame),
         cycle_time_ms=cantools_message.cycle_time,
         comment=_normalize_comment(cantools_message.comment),
+        senders=tuple(cantools_message.senders or ()),
     )
     for cantools_signal in cantools_message.signals:
         signal = _map_signal(cantools_signal)
@@ -104,7 +128,20 @@ def _map_signal(cantools_signal: Any) -> Signal:
         multiplexer_signal=cantools_signal.multiplexer_signal,
         value_descriptions=tuple(sorted((int(k), str(v)) for k, v in (cantools_signal.choices or {}).items())),
         comment=_normalize_comment(cantools_signal.comment),
+        raw_initial=_map_raw_initial(cantools_signal),
     )
+
+
+def _map_raw_initial(cantools_signal: Any) -> float | None:
+    # GenSigStartValue: the value the stack transmits before the application
+    # writes the signal for the first time.
+    raw_initial = getattr(cantools_signal, "raw_initial", None)
+    if raw_initial is None:
+        return None
+    try:
+        return float(raw_initial)
+    except (TypeError, ValueError):
+        return None
 
 
 def _normalize_frame_id(frame_id: int) -> int:
