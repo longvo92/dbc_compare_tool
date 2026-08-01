@@ -7,7 +7,9 @@ from pathlib import Path
 from dbc_compare_tool.core.models import DbcDatabase, Message, NodeSelection, Signal
 from dbc_compare_tool.core.parser import parse_dbc
 from dbc_compare_tool.core.signal_focus import (
+    APP_PROPERTY_ORDER,
     NodeSelectionInput,
+    _app_properties,
     collect_node_signals,
     compare_signal_focus,
     pair_databases,
@@ -172,6 +174,36 @@ class SignalFocusStatusTests(unittest.TestCase):
         self.assertEqual(
             dict((prop, (old, new)) for prop, old, new in row.property_diffs),
             {"Length": ("8", "16"), "Value Type": ("unsigned", "signed")},
+        )
+
+    def test_every_compared_property_reaches_the_diff(self):
+        """`_app_properties` and `APP_PROPERTY_ORDER` have to stay in step.
+
+        The diff is built by walking `APP_PROPERTY_ORDER`, so a property added
+        to one and not the other is compared but never reported, or reported
+        under a name that is never compared.
+        """
+        reference = _app_properties(make_signal("Any"))
+        self.assertEqual(set(APP_PROPERTY_ORDER), set(reference))
+
+    def test_unit_min_max_and_description_changes_are_reported(self):
+        old_db = make_db(make_message("Status", 0x100, make_signal(
+            "Level", unit="%", minimum=0.0, maximum=100.0, comment="State of charge.",
+        )))
+        new_db = make_db(make_message("Status", 0x100, make_signal(
+            "Level", unit="percent", minimum=-10.0, maximum=110.0, comment="State of charge, extended.",
+        )))
+
+        row = row_of(run_focus(old_db, new_db), "Level")
+        self.assertEqual(row.status, "Modified")
+        self.assertEqual(
+            {prop: (old, new) for prop, old, new in row.property_diffs},
+            {
+                "Min": ("0", "-10"),
+                "Max": ("100", "110"),
+                "Unit": ("%", "percent"),
+                "Description": ("State of charge.", "State of charge, extended."),
+            },
         )
 
     def test_initial_value_change_is_modified(self):
