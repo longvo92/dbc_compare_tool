@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -240,11 +241,26 @@ QPlainTextEdit {
     font-size: 9pt;
 }
 QPlainTextEdit:focus { border: 1px solid #2563eb; }
+QScrollArea {
+    background: transparent;
+    border: none;
+}
 """
 
 
 def _read_resource_text(filename: str) -> str:
     return _resource_path(filename).read_text(encoding="utf-8")
+
+
+def _scrollable(content: QWidget) -> QScrollArea:
+    """Wrap a tab's content so a small window scrolls instead of crushing it."""
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    scroll.viewport().setAutoFillBackground(False)
+    content.setAutoFillBackground(False)
+    scroll.setWidget(content)
+    return scroll
 
 
 class CompareWorker(QThread):
@@ -493,8 +509,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("DBC Compare Tool")
-        self.resize(880, 660)
-        self.setMinimumSize(700, 500)
+        self.resize(1000, 780)
+        self.setMinimumSize(720, 520)
         self.worker: CompareWorker | None = None
         self.export_worker: ExportWorker | None = None
         self._pending_output_path: Path | None = None
@@ -628,14 +644,15 @@ class MainWindow(QMainWindow):
         self.open_button.setEnabled(False)
 
         # Tab 1 — the folder-to-folder baseline comparison
-        baseline_tab = QWidget()
-        baseline_layout = QVBoxLayout(baseline_tab)
-        baseline_layout.setContentsMargins(12, 12, 12, 12)
+        baseline_content = QWidget()
+        baseline_layout = QVBoxLayout(baseline_content)
+        baseline_layout.setContentsMargins(0, 0, 0, 0)
         baseline_layout.setSpacing(10)
         baseline_layout.addWidget(input_group)
         baseline_layout.addWidget(filter_group)
         baseline_layout.addLayout(buttons)
         baseline_layout.addStretch()
+        baseline_tab = _scrollable(baseline_content)
 
         # Tab 2 — application-layer signal view
         focus_tab = QWidget()
@@ -675,8 +692,12 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.addWidget(top_widget)
         splitter.addWidget(log_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        # The controls take the space; the log is a status strip, not the view.
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([620, 120])
+        self.log_view.setMinimumHeight(80)
+        log_widget.setMinimumHeight(110)
 
         self.setCentralWidget(splitter)
 

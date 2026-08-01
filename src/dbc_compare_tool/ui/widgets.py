@@ -23,6 +23,9 @@ class DropLineEdit(QLineEdit):
         super().__init__(*args, **kwargs)
         self.setAcceptDrops(True)
         self.setPlaceholderText("Browse or drag & drop a folder here")
+        # Without this the field demands room for the placeholder, which pushes
+        # a horizontal scrollbar onto every layout it sits in.
+        self.setMinimumWidth(160)
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():

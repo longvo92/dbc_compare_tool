@@ -99,16 +99,18 @@ how often it is sent.
 2. Click **Load & Pair DBC**. Files are paired the same way as in the baseline comparison, including
    renamed files, and the ECU nodes of each file are loaded.
 3. For every pair, pick the ECU node your software runs on — separately for the old and the new side,
-   so a node renamed between baselines still works. **Apply First Node To All** copies your first
-   choice to every other pair offering the same node name. Leave both drop-downs on `— none —` to
-   skip a pair.
+   so a node renamed between baselines still works. **Apply First Node To All**, under the table,
+   copies your first choice to every other pair offering the same node name. Leave both drop-downs
+   on `— none —` to skip a pair.
 4. Paste your application's signal list into the text box, or click **Import .txt…**. One name per
    line; comment lines starting with `#` or `//` are skipped, and everything after the first comma,
    semicolon, or tab is ignored, so you can paste straight out of Excel. Leave the box empty to audit
    every signal of the node.
-5. Click **Run Signal Compare**. The result appears in the table below; tick **Show only signals
-   needing review** to hide everything that is fine.
-6. Click **Export Excel** to write the report.
+5. Click **Run Signal Compare**. The result opens in its own window, so it gets the whole screen
+   instead of a strip under the controls. Tick **Show only signals needing review** to hide
+   everything that is fine, and click a column header to sort — the default order is the order of
+   your signal list. **Export Excel** is in that window; **Show Results** in the tab brings it back
+   if you closed it.
 
 ### Signal Statuses
 

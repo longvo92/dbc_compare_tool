@@ -3,6 +3,10 @@
 Workflow: pick both baseline folders, pair the DBC files, choose the ECU node
 on each side of every pair, optionally paste the application's signal list,
 then review the result and export it.
+
+The result lives in its own resizable window rather than in the tab: a signal
+list of any realistic size needs the whole screen, and squeezing it under the
+setup controls left it one row tall.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QDialog,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -23,7 +28,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
-    QSplitter,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -66,6 +71,17 @@ _PAIR_STATUS_COLOR: dict[str, str] = {
     "DBC Removed": "#FCE4D6",
     "Parse Error": "#FFC7CE",
 }
+
+_RESULT_HEADERS = (
+    "Signal",
+    "Status",
+    "In List",
+    "Direction",
+    "Changed Properties",
+    "Carrier (Old)",
+    "Carrier (New)",
+    "Note",
+)
 
 
 class PairWorker(QThread):
@@ -123,6 +139,140 @@ class FocusExportWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class SignalFocusResultWindow(QDialog):
+    """Comparison result in a window of its own, non-modal so the tab stays usable."""
+
+    export_requested = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Signal Focus Results")
+        self.setWindowFlag(Qt.WindowType.Window, True)
+        self.setSizeGripEnabled(True)
+        self.resize(1180, 620)
+        self._settings = QSettings("DbcCompareTool", "DBCCompareTool")
+        self._result: SignalFocusResult | None = None
+
+        self.summary_label = QLabel("No comparison has been run yet.")
+        self.summary_label.setWordWrap(True)
+        self.only_review_check = QCheckBox("Show only signals needing review")
+        self.export_button = QPushButton("Export Excel")
+        self.export_button.setObjectName("primaryButton")
+        self.table = QTableWidget(0, len(_RESULT_HEADERS))
+
+        self.table.setHorizontalHeaderLabels(list(_RESULT_HEADERS))
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setWordWrap(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(True)
+        # Sorting on demand only. Qt's built-in sorting would re-order the rows
+        # the moment it is enabled, and the default order has to stay the order
+        # of the signal list the user handed in.
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(True)
+        header.sectionClicked.connect(self._sort_by_column)
+        self._sort_column = -1
+        self._sort_order = Qt.SortOrder.AscendingOrder
+
+        top_row = QHBoxLayout()
+        top_row.addWidget(self.only_review_check)
+        top_row.addStretch()
+        top_row.addWidget(self.export_button)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+        layout.addWidget(self.summary_label)
+        layout.addLayout(top_row)
+        layout.addWidget(self.table)
+
+        self.only_review_check.toggled.connect(self._render)
+        self.export_button.clicked.connect(self.export_requested)
+
+        if geometry := self._settings.value("signal_focus_window_geometry"):
+            self.restoreGeometry(geometry)
+
+    def show_result(self, result: SignalFocusResult) -> None:
+        self._result = result
+        summary = result.summary()
+        scope = (
+            f"{summary['Total Signals']} signal(s) from the list"
+            if result.watchlist_size
+            else f"{summary['Total Signals']} signal(s) — full node audit"
+        )
+        nodes = ", ".join(
+            f"{selection.dbc_file}: {selection.old_node or '—'} → {selection.new_node or '—'}"
+            for selection in result.selections
+        )
+        self.summary_label.setText(
+            f"{scope} · {summary['Needs Review']} need review — "
+            f"Removed {summary['Removed']}, Modified {summary['Modified']}, "
+            f"Added {summary['Added']}, Direction Changed {summary['Direction Changed']}, "
+            f"Out Of Node Scope {summary['Out Of Node Scope']}, "
+            f"Ambiguous {summary['Ambiguous']}, Not In DBC {summary['Not In DBC']}, "
+            f"Moved {summary['Moved']}, Unchanged {summary['Unchanged']}\n{nodes}"
+        )
+        self.export_button.setEnabled(True)
+        self._render()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _sort_by_column(self, column: int) -> None:
+        if column == self._sort_column and self._sort_order == Qt.SortOrder.AscendingOrder:
+            self._sort_order = Qt.SortOrder.DescendingOrder
+        else:
+            self._sort_order = Qt.SortOrder.AscendingOrder
+        self._sort_column = column
+        self.table.horizontalHeader().setSortIndicator(column, self._sort_order)
+        self.table.sortItems(column, self._sort_order)
+
+    def _render(self) -> None:
+        rows = self._result.rows if self._result else []
+        if self.only_review_check.isChecked():
+            rows = [row for row in rows if row.status in SIGNAL_FOCUS_ATTENTION_STATUSES]
+
+        self._sort_column = -1
+        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        self.table.setRowCount(len(rows))
+        for index, row in enumerate(rows):
+            changed = "; ".join(f"{prop}: {old} -> {new}" for prop, old, new in row.property_diffs)
+            value_changes = "; ".join(
+                f"Value {raw}: {old or '—'} -> {new or '—'} ({kind})"
+                for raw, old, new, kind in row.value_table_diffs
+            )
+            cells = (
+                row.signal_name,
+                row.status,
+                "Yes" if row.in_watchlist else "",
+                f"{_direction(row.old_refs)} -> {_direction(row.new_refs)}",
+                "; ".join(part for part in (changed, value_changes) if part),
+                _carriers(row.old_refs),
+                _carriers(row.new_refs),
+                row.note.replace("\n", " · "),
+            )
+            color = _STATUS_COLOR.get(row.status)
+            for column, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                item.setToolTip(text or row.note)
+                if color:
+                    item.setBackground(QColor(color))
+                self.table.setItem(index, column, item)
+        self.table.resizeColumnsToContents()
+        for column in range(self.table.columnCount()):
+            if self.table.columnWidth(column) > 420:
+                self.table.setColumnWidth(column, 420)
+
+    def closeEvent(self, event) -> None:
+        self._settings.setValue("signal_focus_window_geometry", self.saveGeometry())
+        super().closeEvent(event)
+
+
 class SignalFocusPanel(QWidget):
     """Node- and signal-centric comparison, independent of the baseline tab."""
 
@@ -134,6 +284,7 @@ class SignalFocusPanel(QWidget):
         self._settings = QSettings("DbcCompareTool", "DBCCompareTool")
         self._pairs: list[PairedDatabases] = []
         self._result: SignalFocusResult | None = None
+        self._result_window: SignalFocusResultWindow | None = None
         self._pair_worker: PairWorker | None = None
         self._focus_worker: FocusWorker | None = None
         self._export_worker: FocusExportWorker | None = None
@@ -147,10 +298,8 @@ class SignalFocusPanel(QWidget):
         self.clear_button = QPushButton("Clear")
         self.count_label = QLabel("0 signal(s) — full node audit")
         self.run_button = QPushButton("Run Signal Compare")
-        self.export_button = QPushButton("Export Excel")
-        self.only_review_check = QCheckBox("Show only signals needing review")
+        self.show_result_button = QPushButton("Show Results")
         self.pair_table = QTableWidget(0, 4)
-        self.result_table = QTableWidget(0, 7)
 
         self._build_layout()
         self._wire_events()
@@ -164,6 +313,7 @@ class SignalFocusPanel(QWidget):
         grid = QGridLayout(folders)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(8)
+        grid.setColumnStretch(1, 1)
 
         grid.addWidget(QLabel("Old Baseline Folder"), 0, 0)
         grid.addWidget(self.old_input, 0, 1)
@@ -182,11 +332,7 @@ class SignalFocusPanel(QWidget):
         self.pair_button.setToolTip(
             "Discover and pair the .dbc files of both folders, then load their ECU nodes."
         )
-        self.apply_node_button.setToolTip(
-            "Copy the node selected in the first row to every other pair that offers the same node name."
-        )
         pair_row.addWidget(self.pair_button)
-        pair_row.addWidget(self.apply_node_button)
         pair_row.addStretch()
         grid.addLayout(pair_row, 2, 1, 1, 2)
 
@@ -210,8 +356,16 @@ class SignalFocusPanel(QWidget):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.pair_table.setMinimumHeight(120)
+        self._resize_pair_table()
         nodes_layout.addWidget(self.pair_table)
+
+        self.apply_node_button.setToolTip(
+            "Copy the node selected in the first row to every other pair that offers the same node name."
+        )
+        apply_row = QHBoxLayout()
+        apply_row.addWidget(self.apply_node_button)
+        apply_row.addStretch()
+        nodes_layout.addLayout(apply_row)
 
         signals_group = QGroupBox("Application Signal List")
         signals_layout = QVBoxLayout(signals_group)
@@ -224,7 +378,7 @@ class SignalFocusPanel(QWidget):
         signals_layout.addWidget(signal_hint)
 
         self.watchlist_edit.setPlaceholderText("VehicleSpeed\nIgnitionState\nBatterySoc")
-        self.watchlist_edit.setMinimumHeight(90)
+        self.watchlist_edit.setMinimumHeight(84)
         signals_layout.addWidget(self.watchlist_edit)
 
         signal_buttons = QHBoxLayout()
@@ -237,50 +391,38 @@ class SignalFocusPanel(QWidget):
 
         actions = QHBoxLayout()
         self.run_button.setObjectName("primaryButton")
+        self.run_button.setToolTip("Compare the selected nodes and open the result window.")
+        self.show_result_button.setToolTip("Bring the result window back to the front.")
         actions.addWidget(self.run_button)
-        actions.addWidget(self.export_button)
-        actions.addWidget(self.only_review_check)
+        actions.addWidget(self.show_result_button)
         actions.addStretch()
 
-        self.result_table.setHorizontalHeaderLabels(
-            ["Signal", "Status", "In List", "Direction", "Changed Properties", "Carrier (New)", "Note"]
-        )
-        self.result_table.verticalHeader().setVisible(False)
-        self.result_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.result_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.result_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        result_header = self.result_table.horizontalHeader()
-        result_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        result_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        result_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+        content_layout.addWidget(folders)
+        content_layout.addWidget(nodes_group)
+        content_layout.addWidget(signals_group)
+        content_layout.addStretch()
 
-        setup_widget = QWidget()
-        setup_layout = QVBoxLayout(setup_widget)
-        setup_layout.setContentsMargins(0, 0, 0, 0)
-        setup_layout.setSpacing(10)
-        setup_layout.addWidget(folders)
-        setup_layout.addWidget(nodes_group)
-        setup_layout.addWidget(signals_group)
-        setup_layout.addLayout(actions)
-
-        results_widget = QWidget()
-        results_layout = QVBoxLayout(results_widget)
-        results_layout.setContentsMargins(0, 0, 0, 0)
-        results_layout.setSpacing(6)
-        results_label = QLabel("RESULT PREVIEW")
-        results_label.setObjectName("sectionLabel")
-        results_layout.addWidget(results_label)
-        results_layout.addWidget(self.result_table)
-
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(setup_widget)
-        splitter.addWidget(results_widget)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
+        # A scroll area instead of a splitter: when the window gets small the
+        # groups keep their natural size and the panel scrolls, rather than
+        # every group being squeezed until its content is unreadable.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.viewport().setAutoFillBackground(False)
+        content.setAutoFillBackground(False)
+        scroll.setWidget(content)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(splitter)
+        layout.setSpacing(8)
+        layout.addWidget(scroll)
+        # Outside the scroll area: Run must stay reachable however small the window.
+        layout.addLayout(actions)
 
     def _wire_events(self) -> None:
         self.pair_button.clicked.connect(self._load_pairs)
@@ -289,8 +431,7 @@ class SignalFocusPanel(QWidget):
         self.clear_button.clicked.connect(self.watchlist_edit.clear)
         self.watchlist_edit.textChanged.connect(self._update_watchlist_count)
         self.run_button.clicked.connect(self._run_compare)
-        self.export_button.clicked.connect(self._export)
-        self.only_review_check.toggled.connect(self._render_result)
+        self.show_result_button.clicked.connect(self._show_result_window)
         self.old_input.textChanged.connect(self._invalidate_pairs)
         self.new_input.textChanged.connect(self._invalidate_pairs)
 
@@ -311,6 +452,8 @@ class SignalFocusPanel(QWidget):
         self._settings.setValue("signal_focus_old_folder", self.old_input.text())
         self._settings.setValue("signal_focus_new_folder", self.new_input.text())
         self._settings.setValue("signal_focus_watchlist", self.watchlist_edit.toPlainText())
+        if self._result_window is not None:
+            self._result_window.close()
 
     # -- pairing -----------------------------------------------------------
 
@@ -365,6 +508,19 @@ class SignalFocusPanel(QWidget):
             self.pair_table.setCellWidget(row, 2, self._node_combo(pair.old_db))
             self.pair_table.setCellWidget(row, 3, self._node_combo(pair.new_db))
             self._preselect_common_node(row, pair)
+        self._resize_pair_table()
+
+    def _resize_pair_table(self) -> None:
+        """Keep the table as tall as its rows, so it never leaves a blank block.
+
+        Both bounds are set: the table's size policy is Expanding, so a minimum
+        alone would still let it stretch to fill the group.
+        """
+        header = self.pair_table.horizontalHeader().height()
+        rows = sum(self.pair_table.rowHeight(row) for row in range(self.pair_table.rowCount()))
+        height = min(max(header + rows + 8, 76), 240)
+        self.pair_table.setMinimumHeight(height)
+        self.pair_table.setMaximumHeight(height)
 
     def _node_combo(self, database) -> NoWheelComboBox:
         combo = NoWheelComboBox()
@@ -484,7 +640,6 @@ class SignalFocusPanel(QWidget):
         self._set_busy(False)
         self._result = result
         summary = result.summary()
-        self._render_result()
         self.log.emit(
             f"Signal focus: {summary['Total Signals']} signal(s), "
             f"{summary['Needs Review']} need review "
@@ -493,37 +648,15 @@ class SignalFocusPanel(QWidget):
             f"Not In DBC {summary['Not In DBC']})."
         )
         self._update_button_states()
+        self._show_result_window()
 
-    def _render_result(self) -> None:
-        rows = self._result.rows if self._result else []
-        if self.only_review_check.isChecked():
-            rows = [row for row in rows if row.status in SIGNAL_FOCUS_ATTENTION_STATUSES]
-
-        self.result_table.setRowCount(len(rows))
-        for index, row in enumerate(rows):
-            direction = f"{_direction(row.old_refs)} -> {_direction(row.new_refs)}"
-            changed = "; ".join(f"{prop}: {old} -> {new}" for prop, old, new in row.property_diffs)
-            value_changes = "; ".join(
-                f"Value {raw}: {old or '—'} -> {new or '—'} ({kind})"
-                for raw, old, new, kind in row.value_table_diffs
-            )
-            cells = [
-                row.signal_name,
-                row.status,
-                "Yes" if row.in_watchlist else "",
-                direction,
-                "; ".join(part for part in (changed, value_changes) if part),
-                _carriers(row.new_refs) or _carriers(row.old_refs),
-                row.note.replace("\n", " · "),
-            ]
-            color = _STATUS_COLOR.get(row.status)
-            for column, text in enumerate(cells):
-                item = QTableWidgetItem(text)
-                if row.note:
-                    item.setToolTip(row.note)
-                if color:
-                    item.setBackground(QColor(color))
-                self.result_table.setItem(index, column, item)
+    def _show_result_window(self) -> None:
+        if self._result is None:
+            return
+        if self._result_window is None:
+            self._result_window = SignalFocusResultWindow(self.window())
+            self._result_window.export_requested.connect(self._export)
+        self._result_window.show_result(self._result)
 
     # -- export ------------------------------------------------------------
 
@@ -533,8 +666,9 @@ class SignalFocusPanel(QWidget):
         default = self._settings.value("signal_focus_report_path") or str(
             Path.cwd() / "signal_focus_report.xlsx"
         )
+        parent = self._result_window or self
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save Signal Focus Report", str(default), "Excel (*.xlsx)"
+            parent, "Save Signal Focus Report", str(default), "Excel (*.xlsx)"
         )
         if not path:
             return
@@ -563,8 +697,10 @@ class SignalFocusPanel(QWidget):
         QMessageBox.critical(self, "Signal Focus Failed", message)
 
     def _set_busy(self, busy: bool) -> None:
-        for button in (self.pair_button, self.run_button, self.export_button):
+        for button in (self.pair_button, self.run_button):
             button.setEnabled(not busy)
+        if self._result_window is not None:
+            self._result_window.export_button.setEnabled(not busy)
         self.busy_changed.emit(busy)
         if not busy:
             self._update_button_states()
@@ -573,7 +709,7 @@ class SignalFocusPanel(QWidget):
         has_pairs = bool(self._pairs)
         self.run_button.setEnabled(has_pairs)
         self.apply_node_button.setEnabled(has_pairs)
-        self.export_button.setEnabled(self._result is not None)
+        self.show_result_button.setEnabled(self._result is not None)
 
     def _restore_state(self) -> None:
         if value := self._settings.value("signal_focus_old_folder"):
@@ -602,4 +738,4 @@ def _carriers(refs) -> str:
         label = f"{ref.message_name} (0x{ref.can_id:X})"
         if label not in seen:
             seen.append(label)
-    return ", ".join(seen)
+    return ", ".join(seen) or "—"

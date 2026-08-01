@@ -51,6 +51,11 @@ This project is a local Windows desktop application for automotive engineers com
    - PySide6 desktop UI with an application-wide stylesheet.
    - A tab host: **Baseline Compare** (folder-to-folder report) and **Signal Focus**
      (`ui/signal_focus_panel.py`). Both share the header, progress bar, and execution log.
+   - Each tab's controls sit in a `QScrollArea` so a small window scrolls instead of squeezing every
+     group until its content is unreadable, and the tab's primary action stays outside that scroll
+     area so it is always reachable. The Signal Focus result is a separate non-modal window
+     (`SignalFocusResultWindow`) rather than a pane in the tab — nested vertical splitters left it
+     one row tall, and a real signal list needs the whole screen.
    - Runs comparison, pairing, and export on worker threads to keep the UI responsive.
    - Persists last-used folder paths, the signal list, and both report paths via
      `QSettings("DbcCompareTool", "DBCCompareTool")` (Windows registry).
