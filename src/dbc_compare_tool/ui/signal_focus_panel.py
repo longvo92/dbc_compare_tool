@@ -204,7 +204,13 @@ class SignalFocusResultWindow(QDialog):
         if geometry := self._settings.value("signal_focus_window_geometry"):
             self.restoreGeometry(geometry)
 
-    def show_result(self, result: SignalFocusResult) -> None:
+    def show_result(self, result: SignalFocusResult, exported: Path | None = None) -> None:
+        """Display `result`; `exported` is the report already written for it, if any.
+
+        Reopening the window for an unchanged result must not forget that its
+        report is already on disk, so the caller passes that state in rather
+        than the window assuming nothing has been exported yet.
+        """
         self._result = result
         summary = result.summary()
         scope = (
@@ -225,13 +231,18 @@ class SignalFocusResultWindow(QDialog):
             f"Moved {summary['Moved']}, Unchanged {summary['Unchanged']}\n{nodes}"
         )
         self.export_button.setEnabled(True)
-        # A fresh result invalidates whatever was last exported to disk.
-        self.open_report_button.setEnabled(False)
-        self.open_report_button.setToolTip("Open the exported report — export first.")
+        self.set_exported_report(exported)
         self._render()
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def set_exported_report(self, path: Path | None) -> None:
+        """Point Open Report at `path`, or disable it when nothing is exported."""
+        self.open_report_button.setEnabled(path is not None)
+        self.open_report_button.setToolTip(
+            str(path) if path is not None else "Open the exported report — export first."
+        )
 
     def _sort_by_column(self, column: int) -> None:
         if column == self._sort_column and self._sort_order == Qt.SortOrder.AscendingOrder:
@@ -644,6 +655,8 @@ class SignalFocusPanel(QWidget):
     def _on_compared(self, result: SignalFocusResult) -> None:
         self._set_busy(False)
         self._result = result
+        # A new result invalidates whatever was exported for the previous one.
+        self._last_report = None
         summary = result.summary()
         self.log.emit(
             f"Signal focus: {summary['Total Signals']} signal(s), "
@@ -662,8 +675,7 @@ class SignalFocusPanel(QWidget):
             self._result_window = SignalFocusResultWindow(self.window())
             self._result_window.export_requested.connect(self._export)
             self._result_window.open_report_requested.connect(self._open_report)
-        self._last_report = None
-        self._result_window.show_result(self._result)
+        self._result_window.show_result(self._result, exported=self._last_report)
 
     # -- export ------------------------------------------------------------
 
@@ -691,12 +703,10 @@ class SignalFocusPanel(QWidget):
         self._export_worker.start()
 
     def _on_exported(self, path: Path) -> None:
-        self._set_busy(False)
+        # Set before _set_busy, which is what re-enables Open Report.
         self._last_report = path
+        self._set_busy(False)
         self.log.emit(f"Signal focus report generated: {path}")
-        if self._result_window is not None:
-            self._result_window.open_report_button.setEnabled(True)
-            self._result_window.open_report_button.setToolTip(str(path))
         self._update_button_states()
 
     def _open_report(self) -> None:
@@ -704,7 +714,7 @@ class SignalFocusPanel(QWidget):
             os.startfile(self._last_report)
         else:
             QMessageBox.information(
-                self,
+                self._result_window or self,
                 "Report Not Found",
                 "The report file no longer exists. Export the report again.",
             )
@@ -722,12 +732,9 @@ class SignalFocusPanel(QWidget):
             button.setEnabled(not busy)
         if self._result_window is not None:
             self._result_window.export_button.setEnabled(not busy)
-            # Only re-enable Open Report if there is still a report to open —
-            # its own state, not general busy/idle, decides that.
-            if busy:
-                self._result_window.open_report_button.setEnabled(False)
-            elif self._last_report is not None:
-                self._result_window.open_report_button.setEnabled(True)
+            # Open Report follows whether a report exists, not busy/idle — but
+            # nothing is openable mid-export.
+            self._result_window.set_exported_report(None if busy else self._last_report)
         self.busy_changed.emit(busy)
         if not busy:
             self._update_button_states()

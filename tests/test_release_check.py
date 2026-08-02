@@ -6,7 +6,10 @@ against the real project files, which is what keeps the gate honest as those
 files change.
 """
 
+import contextlib
 import importlib.util
+import io
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -145,12 +148,55 @@ class RealRepositoryTests(unittest.TestCase):
         notes = release_check.extract_release_notes(released, self.version)
         self.assertTrue(notes.strip())
 
-    def test_notes_are_written_when_asked(self):
-        notes = release_check.extract_release_notes(_NOTES, "0.2.0")
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / "RELEASE_NOTES.md"
-            target.write_text(notes + "\n", encoding="utf-8")
-            self.assertEqual(target.read_text(encoding="utf-8").strip(), notes)
+
+class CommandLineTests(unittest.TestCase):
+    """`--notes` is what feeds `gh release create --notes-file`, so the file the
+    script writes is part of the release contract, not an implementation detail."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+
+        init_file = root / "__init__.py"
+        init_file.write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+        pyproject = root / "pyproject.toml"
+        pyproject.write_text('[project]\nversion = "0.2.0"\n', encoding="utf-8")
+        changelog = root / "CHANGELOG.md"
+        changelog.write_text(_NOTES, encoding="utf-8")
+
+        for name, value in (
+            ("INIT_FILE", init_file),
+            ("PYPROJECT", pyproject),
+            ("CHANGELOG", changelog),
+        ):
+            original = getattr(release_check, name)
+            setattr(release_check, name, value)
+            self.addCleanup(setattr, release_check, name, original)
+
+        self.notes_path = root / "RELEASE_NOTES.md"
+
+    def _run(self, *argv: str) -> int:
+        original_argv = sys.argv
+        sys.argv = ["release_check.py", *argv]
+        self.addCleanup(setattr, sys, "argv", original_argv)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return release_check.main()
+
+    def test_notes_file_holds_the_section_for_the_released_version(self):
+        self.assertEqual(self._run("0.2.0", "--notes", str(self.notes_path)), 0)
+        written = self.notes_path.read_text(encoding="utf-8")
+        self.assertIn("Signal Focus tab", written)
+        self.assertNotIn("Manual DBC pairing", written, "older sections must not leak in")
+        self.assertNotIn("Unreleased", written)
+
+    def test_no_notes_file_is_written_without_the_flag(self):
+        self.assertEqual(self._run("0.2.0"), 0)
+        self.assertFalse(self.notes_path.exists())
+
+    def test_a_mismatched_version_exits_non_zero_and_writes_nothing(self):
+        self.assertEqual(self._run("0.3.0", "--notes", str(self.notes_path)), 1)
+        self.assertFalse(self.notes_path.exists())
 
 
 if __name__ == "__main__":
