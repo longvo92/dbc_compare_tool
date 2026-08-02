@@ -4,10 +4,11 @@ from datetime import datetime
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from dbc_compare_tool.core.models import Change, ComparisonResult, FilePairSummary
+from dbc_compare_tool.report._style import BORDER, HEADER_BG, HEADER_FG
 
 
 SUMMARY_ORDER = [
@@ -22,8 +23,8 @@ SUMMARY_ORDER = [
     "Total Changes",
 ]
 
-_HEADER_BG = "2E74B5"   # modern blue header
-_HEADER_FG = "FFFFFF"
+_HEADER_BG = HEADER_BG
+_HEADER_FG = HEADER_FG
 
 # Row background color keyed by change_type
 _CHANGE_ROW_FILL: dict[str, str] = {
@@ -66,8 +67,7 @@ _STATUS_FILL: dict[str, str] = {
     "Parse Error":     "FFC7CE",   # pink-red
 }
 
-_THIN = Side(style="thin", color="D0D0D0")
-_BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+_BORDER = BORDER
 
 
 def write_excel_report(result: ComparisonResult, output_path: Path) -> Path:

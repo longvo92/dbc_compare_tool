@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -25,9 +24,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -39,6 +40,8 @@ from dbc_compare_tool.core.comparator import DbcComparator, filter_result, rejec
 from dbc_compare_tool.core.discovery import collect_dbc_files
 from dbc_compare_tool.core.models import Change, ComparisonResult
 from dbc_compare_tool.report.excel import write_excel_report
+from dbc_compare_tool.ui.signal_focus_panel import SignalFocusPanel
+from dbc_compare_tool.ui.widgets import DropLineEdit, NoWheelComboBox
 
 
 def _resource_path(filename: str) -> Path:
@@ -207,6 +210,41 @@ QLabel#hintLabel {
     color: #6b7280;
     font-size: 9pt;
 }
+QTabWidget::pane {
+    border: 1px solid #e1e5ee;
+    border-radius: 8px;
+    background: #f8f9fc;
+    top: -1px;
+}
+QTabBar::tab {
+    background: #e8ecf6;
+    border: 1px solid #e1e5ee;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 7px 18px;
+    margin-right: 2px;
+    color: #4b5563;
+}
+QTabBar::tab:selected {
+    background: #f8f9fc;
+    color: #16213a;
+    font-weight: 600;
+}
+QTabBar::tab:hover:!selected { background: #eef2fb; }
+QPlainTextEdit {
+    background: #ffffff;
+    border: 1px solid #d4d9e4;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: 'Cascadia Mono', 'Consolas', monospace;
+    font-size: 9pt;
+}
+QPlainTextEdit:focus { border: 1px solid #2563eb; }
+QScrollArea {
+    background: transparent;
+    border: none;
+}
 """
 
 
@@ -214,38 +252,15 @@ def _read_resource_text(filename: str) -> str:
     return _resource_path(filename).read_text(encoding="utf-8")
 
 
-class NoWheelComboBox(QComboBox):
-    """QComboBox that ignores wheel events.
-
-    Used inside the manual-pairing table: scrolling the table must not
-    silently change a pairing, and the ignored event lets the table scroll.
-    """
-
-    def wheelEvent(self, event) -> None:
-        event.ignore()
-
-
-class DropLineEdit(QLineEdit):
-    """QLineEdit that accepts folder drag-and-drop."""
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.setAcceptDrops(True)
-        self.setPlaceholderText("Browse or drag & drop a folder here")
-
-    def dragEnterEvent(self, event) -> None:
-        if event.mimeData().hasUrls():
-            url = event.mimeData().urls()[0]
-            if Path(url.toLocalFile()).is_dir():
-                event.acceptProposedAction()
-                return
-        event.ignore()
-
-    def dropEvent(self, event) -> None:
-        path = Path(event.mimeData().urls()[0].toLocalFile())
-        if path.is_dir():
-            self.setText(str(path))
-            event.acceptProposedAction()
+def _scrollable(content: QWidget) -> QScrollArea:
+    """Wrap a tab's content so a small window scrolls instead of crushing it."""
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    scroll.viewport().setAutoFillBackground(False)
+    content.setAutoFillBackground(False)
+    scroll.setWidget(content)
+    return scroll
 
 
 class CompareWorker(QThread):
@@ -494,8 +509,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("DBC Compare Tool")
-        self.resize(880, 660)
-        self.setMinimumSize(700, 500)
+        self.resize(1000, 780)
+        self.setMinimumSize(720, 520)
         self.worker: CompareWorker | None = None
         self.export_worker: ExportWorker | None = None
         self._pending_output_path: Path | None = None
@@ -511,6 +526,7 @@ class MainWindow(QMainWindow):
         self.open_button = QPushButton("Open Report")
         self.progress = QProgressBar()
         self.log_view = QTextEdit()
+        self.signal_focus_panel = SignalFocusPanel(self)
 
         # Manual pairing saved from the Manual Pairing dialog, plus the folder
         # inputs it was built for; invalidated when either folder changes.
@@ -627,15 +643,40 @@ class MainWindow(QMainWindow):
         self.log_view.setReadOnly(True)
         self.open_button.setEnabled(False)
 
+        # Tab 1 — the folder-to-folder baseline comparison
+        baseline_content = QWidget()
+        baseline_layout = QVBoxLayout(baseline_content)
+        baseline_layout.setContentsMargins(0, 0, 0, 0)
+        baseline_layout.setSpacing(10)
+        baseline_layout.addWidget(input_group)
+        baseline_layout.addWidget(filter_group)
+        baseline_layout.addLayout(buttons)
+        baseline_layout.addStretch()
+        baseline_tab = _scrollable(baseline_content)
+
+        # Tab 2 — application-layer signal view
+        focus_tab = QWidget()
+        focus_layout = QVBoxLayout(focus_tab)
+        focus_layout.setContentsMargins(12, 12, 12, 12)
+        focus_layout.addWidget(self.signal_focus_panel)
+
+        self.tabs = QTabWidget()
+        self.tabs.addTab(baseline_tab, "Baseline Compare")
+        self._focus_tab_index = self.tabs.addTab(focus_tab, "Signal Focus")
+        self.tabs.setTabToolTip(0, "Compare two baselines message by message and export the full change report.")
+        self.tabs.setTabToolTip(
+            1,
+            "Compare the signals of one ECU node — data type, scaling, range, value table, "
+            "init value — ignoring frames and timing.",
+        )
+
         # Top pane: controls
         top_widget = QWidget()
         top_layout = QVBoxLayout(top_widget)
         top_layout.setContentsMargins(16, 12, 16, 8)
         top_layout.setSpacing(10)
         top_layout.addLayout(header)
-        top_layout.addWidget(input_group)
-        top_layout.addWidget(filter_group)
-        top_layout.addLayout(buttons)
+        top_layout.addWidget(self.tabs)
         top_layout.addWidget(self.progress)
 
         # Bottom pane: log
@@ -651,8 +692,12 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.addWidget(top_widget)
         splitter.addWidget(log_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        # The controls take the space; the log is a status strip, not the view.
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([620, 120])
+        self.log_view.setMinimumHeight(80)
+        log_widget.setMinimumHeight(110)
 
         self.setCentralWidget(splitter)
 
@@ -663,6 +708,21 @@ class MainWindow(QMainWindow):
         self.open_button.clicked.connect(self._open_report)
         self.old_input.textChanged.connect(self._invalidate_saved_pairing)
         self.new_input.textChanged.connect(self._invalidate_saved_pairing)
+        self.signal_focus_panel.log.connect(self._log)
+        self.signal_focus_panel.busy_changed.connect(self._on_focus_busy)
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+
+    def _on_tab_changed(self, index: int) -> None:
+        if index == self._focus_tab_index:
+            self.signal_focus_panel.prefill_folders(*self._current_folder_inputs())
+
+    def _on_focus_busy(self, busy: bool) -> None:
+        if busy:
+            self.progress.setRange(0, 0)
+        else:
+            self.progress.setRange(0, 1)
+            self.progress.setValue(1)
+        self._set_actions_enabled(not busy)
 
     def _current_folder_inputs(self) -> tuple[str, str]:
         return (self.old_input.text().strip(), self.new_input.text().strip())
@@ -849,6 +909,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         running = [w for w in (self.worker, self.export_worker) if w and w.isRunning()]
+        running += self.signal_focus_panel.running_workers()
         if running:
             reply = QMessageBox.question(
                 self,
@@ -866,6 +927,7 @@ class MainWindow(QMainWindow):
                 worker.disconnect()
                 worker.terminate()
                 worker.wait(3000)
+        self.signal_focus_panel.save_state()
         event.accept()
 
     def _show_help_document(self, title: str, filename: str) -> None:

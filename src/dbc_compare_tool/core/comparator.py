@@ -44,15 +44,15 @@ PROPERTY_LABELS = {
 
 
 @dataclass(frozen=True)
-class _DatabaseCandidate:
+class DatabaseCandidate:
     relative_path: str
     database: DbcDatabase
 
 
 @dataclass(frozen=True)
-class _DatabaseMatch:
-    old: _DatabaseCandidate
-    new: _DatabaseCandidate
+class DatabaseMatch:
+    old: DatabaseCandidate
+    new: DatabaseCandidate
     confidence: float
     reasons: tuple[str, ...]
 
@@ -73,8 +73,8 @@ class DbcComparator:
         progress_callback: Callable[[str], None] | None = None,
     ) -> ComparisonResult:
         result = ComparisonResult()
-        old_only: list[_DatabaseCandidate] = []
-        new_only: list[_DatabaseCandidate] = []
+        old_only: list[DatabaseCandidate] = []
+        new_only: list[DatabaseCandidate] = []
 
         pairs = list(discover_dbc_pairs(old_folder, new_folder))
         total = len(pairs)
@@ -99,9 +99,9 @@ class DbcComparator:
                         signal_count_new=_count_signals(new_db),
                     ))
                 elif pair.old_path:
-                    old_only.append(_DatabaseCandidate(pair.relative_path, parse_dbc(pair.old_path)))
+                    old_only.append(DatabaseCandidate(pair.relative_path, parse_dbc(pair.old_path)))
                 elif pair.new_path:
-                    new_only.append(_DatabaseCandidate(pair.relative_path, parse_dbc(pair.new_path)))
+                    new_only.append(DatabaseCandidate(pair.relative_path, parse_dbc(pair.new_path)))
             except DbcParseError as exc:
                 if progress_callback:
                     progress_callback(f"[{i}/{total}] Parse error, skipped: {pair.relative_path} ({exc})")
@@ -117,7 +117,7 @@ class DbcComparator:
                     signal_count_new=0,
                 ))
 
-        file_matches = _match_renamed_databases(old_only, new_only)
+        file_matches = match_renamed_databases(old_only, new_only)
         matched_old = {id(match.old) for match in file_matches}
         matched_new = {id(match.new) for match in file_matches}
 
@@ -697,19 +697,20 @@ def _frame_key(message: Message) -> tuple[int, bool]:
     return (message.can_id, message.is_extended_frame)
 
 
-def _match_renamed_databases(
-    old_candidates: list[_DatabaseCandidate],
-    new_candidates: list[_DatabaseCandidate],
-) -> list[_DatabaseMatch]:
-    candidates: list[_DatabaseMatch] = []
+def match_renamed_databases(
+    old_candidates: list[DatabaseCandidate],
+    new_candidates: list[DatabaseCandidate],
+) -> list[DatabaseMatch]:
+    """Pair DBC files whose relative paths differ, by CAN ID and structure overlap."""
+    candidates: list[DatabaseMatch] = []
     for old in old_candidates:
         for new in new_candidates:
             confidence, reasons = _score_database_pair(old, new)
             if confidence >= FILE_RENAME_THRESHOLD:
-                candidates.append(_DatabaseMatch(old, new, confidence, reasons))
+                candidates.append(DatabaseMatch(old, new, confidence, reasons))
 
     candidates.sort(key=lambda item: item.confidence, reverse=True)
-    matches: list[_DatabaseMatch] = []
+    matches: list[DatabaseMatch] = []
     used_old: set[int] = set()
     used_new: set[int] = set()
     for candidate in candidates:
@@ -723,7 +724,7 @@ def _match_renamed_databases(
     return matches
 
 
-def _score_database_pair(old: _DatabaseCandidate, new: _DatabaseCandidate) -> tuple[float, tuple[str, ...]]:
+def _score_database_pair(old: DatabaseCandidate, new: DatabaseCandidate) -> tuple[float, tuple[str, ...]]:
     old_messages = old.database.messages
     new_messages = new.database.messages
     if not old_messages or not new_messages:

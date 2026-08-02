@@ -1,5 +1,15 @@
 # DBC Compare Tool - Release Notes
 
+## Version 0.2.0
+
+### Added
+
+- **Signal Focus tab**: a second comparison mode for application-layer work. Pick the ECU node your software runs on, optionally paste or import the list of signals it uses, and get a report about those signals only — data type, scaling, range, unit, value table, and init value. Frames, CAN IDs, DLC, cycle time, and bit positions are treated as transport details, so a signal that merely moved to another message is no longer reported as removed and added.
+- **Per-value value-table comparison**: every changed `VAL_` entry is listed on its own, marked as relabeled, added, or removed. A raw value that kept its number but changed meaning is highlighted, since existing software keeps building against it silently.
+- **Init value comparison**: `GenSigStartValue` is now read and compared.
+- **Signal list import**: the application's signal list can be pasted directly or imported from a `.txt`/`.csv` file; comment lines and extra columns are ignored.
+
+---
 ## Version 0.1.8
 
 ### Added

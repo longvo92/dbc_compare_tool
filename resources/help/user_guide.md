@@ -1,5 +1,9 @@
 # User Guide
 
+The tool has two tabs. **Baseline Compare** reports every change between two DBC baselines.
+**Signal Focus** reports what changed for the software on one ECU — see
+[Signal Focus](#signal-focus) below.
+
 ## Getting Started
 
 1. **Old Baseline Folder** — select (or drag & drop) the folder containing the previous DBC baseline.
@@ -82,9 +86,75 @@ Two situations lower confidence on purpose:
 
 ---
 
+## Signal Focus
+
+Use this tab when you work on the application layer of one ECU and care about the signals themselves
+— data type, scaling, range, unit, value table, init value — not about which message carries them or
+how often it is sent.
+
+### Steps
+
+1. Select the **Old** and **New Baseline Folder**. Switching to this tab copies the folders from the
+   Baseline Compare tab if you have not filled them in yet.
+2. Click **Load & Pair DBC**. Files are paired the same way as in the baseline comparison, including
+   renamed files, and the ECU nodes of each file are loaded.
+3. For every pair, pick the ECU node your software runs on — separately for the old and the new side,
+   so a node renamed between baselines still works. **Apply First Node To All**, under the table,
+   copies your first choice to every other pair offering the same node name. Leave both drop-downs
+   on `— none —` to skip a pair.
+4. Paste your application's signal list into the text box, or click **Import .txt…**. One name per
+   line; comment lines starting with `#` or `//` are skipped, and everything after the first comma,
+   semicolon, or tab is ignored, so you can paste straight out of Excel. Leave the box empty to audit
+   every signal of the node.
+5. Click **Run Signal Compare**. The result opens in its own window, so it gets the whole screen
+   instead of a strip under the controls. Tick **Show only signals needing review** to hide
+   everything that is fine, and click a column header to sort — the default order is the order of
+   your signal list. **Export Excel** is in that window; **Show Results** in the tab brings it back
+   if you closed it.
+
+### Signal Statuses
+
+* **Removed** — the signal is gone from the DBC. Your code breaks. If a new signal has exactly the
+  same properties, its name is given in the note as a possible rename.
+* **Modified** — data type, scaling, range, unit, value table, or init value changed. Check every
+  place the signal is read or written.
+* **Added** — a new signal for this node.
+* **Direction Changed** — the ECU now sends what it used to receive, or the reverse. The port
+  direction in your software has to follow.
+* **Out Of Node Scope** — the signal is still in the DBC but is no longer sent to or from your node.
+  Usually a routing or receiver-list change rather than a deleted signal.
+* **Ambiguous** — the same name is defined more than once with different properties. Decide which one
+  you mean; the tool refuses to guess.
+* **Not In DBC** — the name is in your signal list but in none of the compared files. Almost always a
+  typo in the list.
+* **Moved** — only the carrying message, CAN ID, or bit position changed. Nothing to do; your
+  interface is unaffected.
+* **Unchanged** — no application-relevant difference.
+
+Start bit, byte order, CAN ID, DLC, cycle time, and transmitter are never reported as changes here.
+They belong to the communication stack, not to your application. Use the **Baseline Compare** tab
+when you do need them.
+
+### The Report
+
+* **Signal Focus Summary** — the node selected per DBC pair, the size of your signal list, and how
+  many signals fall into each status. **Needs Review** counts everything except `Moved` and
+  `Unchanged`.
+* **Signal Focus** — one row per signal, with its current properties and both carrier frames.
+* **Property Diff (App)** — one row per changed property, old value in salmon, new value in green.
+* **Value Table Diff** — one row per changed `VAL_` entry, marked **Relabeled**, **Value Added**, or
+  **Value Removed**. Read the relabeled ones first: the raw value kept its number but changed its
+  meaning, so your code still builds and now behaves wrongly.
+
+---
+
 ## Tips
 
 * Drag a folder from Windows Explorer directly onto the baseline fields — no need to click Browse.
 * Drag the divider between the input panel and the Execution Log to resize the log area.
 * Untick change types you don't need before running to get a smaller, focused report.
 * If the report fails to save, make sure the file is not currently open in Excel.
+* In **Signal Focus**, keep your application's signal list in a `.txt` file next to the project and
+  re-import it for every baseline — the report then reads in the same order as your list.
+* If a node shows almost no received signals, check the DBC: receivers left as `Vector__XXX` are not
+  attributed to any node.

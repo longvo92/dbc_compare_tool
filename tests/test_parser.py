@@ -1,5 +1,6 @@
 """Parser tests using example DBC files."""
 
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,16 @@ from dbc_compare_tool.core.parser import parse_dbc
 _EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 _OLD_BUS_A = _EXAMPLES / "old" / "Bus_A.dbc"
 _NEW_BUS_A = _EXAMPLES / "new" / "Bus_A.dbc"
+
+# The example baselines are Intel-only, so byte order needs its own fixture:
+# @1 is little-endian (Intel), @0 is big-endian (Motorola).
+_MIXED_ENDIAN_DBC = """VERSION ""
+
+BO_ 100 Mixed: 8 ECU
+ SG_ IntelSignal : 0|16@1+ (1,0) [0|65535] "" ECM
+ SG_ MotorolaSignal : 23|16@0+ (1,0) [0|65535] "" ECM
+ SG_ SignedSignal : 40|8@1- (1,0) [-128|127] "" ECM
+"""
 
 
 class TestParseOldBusA(unittest.TestCase):
@@ -71,6 +82,30 @@ class TestParseNewBusA(unittest.TestCase):
     def test_veh_spd_max_updated(self):
         sig = self.db.messages["Body_Status"].signals["VehSpd"]
         self.assertEqual(sig.maximum, 220.0)
+
+
+class TestByteOrderAndValueType(unittest.TestCase):
+    """The report prints byte order as "Intel/little-endian (1)" or
+    "Motorola/big-endian (0)", so the mapping direction is part of the output."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        path = Path(self._tmp.name) / "mixed.dbc"
+        path.write_text(_MIXED_ENDIAN_DBC, encoding="utf-8")
+        self.signals = parse_dbc(path).messages["Mixed"].signals
+
+    def test_intel_signal_maps_to_one(self):
+        self.assertEqual(self.signals["IntelSignal"].byte_order, 1)
+
+    def test_motorola_signal_maps_to_zero(self):
+        self.assertEqual(self.signals["MotorolaSignal"].byte_order, 0)
+
+    def test_value_type_follows_the_sign_flag(self):
+        self.assertEqual(self.signals["IntelSignal"].value_type, "unsigned")
+        self.assertFalse(self.signals["IntelSignal"].is_signed)
+        self.assertEqual(self.signals["SignedSignal"].value_type, "signed")
+        self.assertTrue(self.signals["SignedSignal"].is_signed)
 
 
 if __name__ == "__main__":
