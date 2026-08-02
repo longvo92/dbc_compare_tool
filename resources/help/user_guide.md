@@ -10,7 +10,7 @@ The tool has two tabs. **Baseline Compare** reports every change between two DBC
 2. **New Baseline Folder** — select (or drag & drop) the folder containing the new DBC baseline.
 3. **Report Path** — choose where to save the Excel report (`.xlsx`).
 4. **Include Change Types** — tick the change categories you want in the report (Added / Removed / Modified / Renamed). All are included by default.
-5. Click **Run Auto Compare** for automatic file matching, or **Run Manual Compare** to use file pairs you chose yourself in the **Manual Pairing** dialog (see below). Progress appears in the Execution Log. When finished, click **Open Report** to view the result in Excel.
+5. Click **Run Auto Compare** for automatic file matching, or **Run Manual Compare** to use file pairs you chose yourself in the **Manual Pairing** dialog (see below). Progress and the final result appear in the status bar at the bottom of the window. When finished, click **Open Report** to view the result in Excel.
 
 The tool remembers your last-used folders and report path, so the next session starts pre-filled.
 
@@ -151,7 +151,6 @@ when you do need them.
 ## Tips
 
 * Drag a folder from Windows Explorer directly onto the baseline fields — no need to click Browse.
-* Drag the divider between the input panel and the Execution Log to resize the log area.
 * Untick change types you don't need before running to get a smaller, focused report.
 * If the report fails to save, make sure the file is not currently open in Excel.
 * In **Signal Focus**, keep your application's signal list in a `.txt` file next to the project and

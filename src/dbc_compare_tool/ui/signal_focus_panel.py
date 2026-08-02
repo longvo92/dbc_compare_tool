@@ -309,7 +309,7 @@ class SignalFocusPanel(QWidget):
     # -- layout ------------------------------------------------------------
 
     def _build_layout(self) -> None:
-        folders = QGroupBox("Baselines")
+        folders = QGroupBox()
         grid = QGridLayout(folders)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(8)
@@ -337,14 +337,11 @@ class SignalFocusPanel(QWidget):
         grid.addLayout(pair_row, 2, 1, 1, 2)
 
         nodes_group = QGroupBox("ECU Node Per DBC Pair")
-        nodes_layout = QVBoxLayout(nodes_group)
-        node_hint = QLabel(
+        nodes_group.setToolTip(
             "Pick the node your application runs on. Signals the node sends or receives "
             "are compared; everything else is ignored."
         )
-        node_hint.setObjectName("hintLabel")
-        node_hint.setWordWrap(True)
-        nodes_layout.addWidget(node_hint)
+        nodes_layout = QVBoxLayout(nodes_group)
 
         self.pair_table.setHorizontalHeaderLabels(["DBC File", "Pairing", "Old Node", "New Node"])
         self.pair_table.verticalHeader().setVisible(False)
@@ -368,14 +365,11 @@ class SignalFocusPanel(QWidget):
         nodes_layout.addLayout(apply_row)
 
         signals_group = QGroupBox("Application Signal List")
-        signals_layout = QVBoxLayout(signals_group)
-        signal_hint = QLabel(
+        signals_group.setToolTip(
             "Paste one signal name per line, or import a .txt file. Comment lines (#, //) "
             "and extra columns are ignored. Leave empty to audit every signal of the node."
         )
-        signal_hint.setObjectName("hintLabel")
-        signal_hint.setWordWrap(True)
-        signals_layout.addWidget(signal_hint)
+        signals_layout = QVBoxLayout(signals_group)
 
         self.watchlist_edit.setPlaceholderText("VehicleSpeed\nIgnitionState\nBatterySoc")
         self.watchlist_edit.setMinimumHeight(84)

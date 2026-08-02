@@ -9,6 +9,10 @@ heading with its date. See [Releasing](README.md#releasing) for the procedure.
 
 ## [Unreleased]
 
+### Changed
+
+- Simplify the interface: removed the execution log panel and redundant section titles, and progress and results now show in the status bar instead.
+
 ## [0.2.0] - 2026-08-02
 
 ### Added

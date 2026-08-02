@@ -101,29 +101,56 @@ class ReleaseNotesTests(unittest.TestCase):
 
 
 class RealRepositoryTests(unittest.TestCase):
-    """The gate has to pass on the version this repository currently declares."""
+    """The gate has to parse this repository's real files correctly.
+
+    Deliberately does *not* assert that `check(self.version)` succeeds: between
+    releases, [Unreleased] normally holds pending entries while __init__.py
+    still declares the last released version, and `check()` is right to refuse
+    that. What must always hold, in every commit, is that the version
+    currently declared has a real, non-empty, dated changelog section — that
+    is the fact a version bump PR is responsible for keeping true.
+    """
 
     def setUp(self):
         init_text = (_REPO_ROOT / "src" / "dbc_compare_tool" / "__init__.py").read_text(encoding="utf-8")
         self.version = release_check.read_init_version(init_text)
-
-    def test_the_declared_version_is_release_ready(self):
-        notes = release_check.check(self.version)
-        self.assertTrue(notes.strip())
+        self.changelog_text = (_REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
     def test_pyproject_agrees_with_the_package(self):
         pyproject = (_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertEqual(release_check.read_pyproject_version(pyproject), self.version)
 
+    def test_the_declared_version_has_a_dated_non_empty_section(self):
+        headings = list(release_check._CHANGELOG_HEADING.finditer(self.changelog_text))
+        index = 1 if headings and headings[0].group(1) == release_check.UNRELEASED else 0
+        self.assertGreater(len(headings), index, "no dated section follows [Unreleased]")
+        self.assertEqual(headings[index].group(1), self.version)
+        self.assertIsNotNone(headings[index].group(2), "the section has no date")
+        body = release_check._section_body(self.changelog_text, headings, index)
+        self.assertTrue(body.strip())
+
     def test_a_version_the_repository_does_not_declare_is_refused(self):
         with self.assertRaises(release_check.ReleaseCheckError):
             release_check.check("99.99.99")
 
+    def test_check_succeeds_once_unreleased_is_emptied(self):
+        """What `check()` will see on the commit that actually cuts the release:
+        simulate the version-bump PR by dropping everything under [Unreleased]."""
+        headings = list(release_check._CHANGELOG_HEADING.finditer(self.changelog_text))
+        if not headings or headings[0].group(1) != release_check.UNRELEASED:
+            self.skipTest("CHANGELOG.md has no [Unreleased] section to empty")
+        next_start = headings[1].start() if len(headings) > 1 else len(self.changelog_text)
+        released = self.changelog_text[: headings[0].end()] + "\n" + self.changelog_text[next_start:]
+
+        notes = release_check.extract_release_notes(released, self.version)
+        self.assertTrue(notes.strip())
+
     def test_notes_are_written_when_asked(self):
+        notes = release_check.extract_release_notes(_NOTES, "0.2.0")
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "RELEASE_NOTES.md"
-            target.write_text(release_check.check(self.version) + "\n", encoding="utf-8")
-            self.assertTrue(target.read_text(encoding="utf-8").strip())
+            target.write_text(notes + "\n", encoding="utf-8")
+            self.assertEqual(target.read_text(encoding="utf-8").strip(), notes)
 
 
 if __name__ == "__main__":

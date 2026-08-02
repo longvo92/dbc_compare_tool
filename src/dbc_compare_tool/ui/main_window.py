@@ -25,12 +25,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QProgressBar,
     QScrollArea,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
     QTextBrowser,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -87,12 +85,6 @@ QLabel#versionBadge {
     padding: 2px 10px;
     font-size: 8pt;
     font-weight: 600;
-}
-QLabel#sectionLabel {
-    color: #6b7280;
-    font-size: 8pt;
-    font-weight: 700;
-    letter-spacing: 1px;
 }
 QLineEdit {
     background: #ffffff;
@@ -152,15 +144,6 @@ QProgressBar::chunk {
     background: #2563eb;
     border-radius: 4px;
 }
-QTextEdit#logView {
-    background: #1e2430;
-    color: #d6e2f3;
-    border: none;
-    border-radius: 8px;
-    font-family: 'Cascadia Mono', 'Consolas', monospace;
-    font-size: 9pt;
-    padding: 6px;
-}
 QTextBrowser {
     background: #ffffff;
     border: 1px solid #e1e5ee;
@@ -190,7 +173,6 @@ QStatusBar {
     background: #eef1f8;
     color: #4b5563;
 }
-QSplitter::handle { background: transparent; }
 QTableWidget {
     background: #ffffff;
     border: 1px solid #e1e5ee;
@@ -537,7 +519,6 @@ class MainWindow(QMainWindow):
         self.manual_pair_button = QPushButton("Manual Pairing…")
         self.open_button = QPushButton("Open Report")
         self.progress = QProgressBar()
-        self.log_view = QTextEdit()
         self.signal_focus_panel = SignalFocusPanel(self)
 
         # Manual pairing saved from the Manual Pairing dialog, plus the folder
@@ -596,7 +577,7 @@ class MainWindow(QMainWindow):
         header.addWidget(subtitle)
 
         # Input form
-        input_group = QGroupBox("Baselines && Report")
+        input_group = QGroupBox()
         form = QGridLayout(input_group)
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(8)
@@ -619,9 +600,10 @@ class MainWindow(QMainWindow):
         output_button.clicked.connect(self._choose_report)
         form.addWidget(output_button, 2, 2)
 
-        # Filter group
-        filter_group = QGroupBox("Include Change Types")
-        filter_layout = QHBoxLayout(filter_group)
+        # Change-type filter — a plain row, not a card: it is four checkboxes
+        # that are all on by default, not a section worth its own title.
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(16)
         for chk in (self.chk_added, self.chk_removed, self.chk_modified, self.chk_renamed):
             filter_layout.addWidget(chk)
         filter_layout.addStretch()
@@ -649,8 +631,6 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
-        self.log_view.setObjectName("logView")
-        self.log_view.setReadOnly(True)
         self.open_button.setEnabled(False)
 
         # Tab 1 — the folder-to-folder baseline comparison
@@ -659,7 +639,7 @@ class MainWindow(QMainWindow):
         baseline_layout.setContentsMargins(0, 0, 0, 0)
         baseline_layout.setSpacing(10)
         baseline_layout.addWidget(input_group)
-        baseline_layout.addWidget(filter_group)
+        baseline_layout.addLayout(filter_layout)
         baseline_layout.addLayout(buttons)
         baseline_layout.addStretch()
         baseline_tab = _scrollable(baseline_content)
@@ -680,36 +660,15 @@ class MainWindow(QMainWindow):
             "init value — ignoring frames and timing.",
         )
 
-        # Top pane: controls
-        top_widget = QWidget()
-        top_layout = QVBoxLayout(top_widget)
-        top_layout.setContentsMargins(16, 12, 16, 8)
-        top_layout.setSpacing(10)
-        top_layout.addLayout(header)
-        top_layout.addWidget(self.tabs)
-        top_layout.addWidget(self.progress)
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(16, 12, 16, 12)
+        central_layout.setSpacing(10)
+        central_layout.addLayout(header)
+        central_layout.addWidget(self.tabs)
+        central_layout.addWidget(self.progress)
 
-        # Bottom pane: log
-        log_label = QLabel("EXECUTION LOG")
-        log_label.setObjectName("sectionLabel")
-        log_widget = QWidget()
-        log_layout = QVBoxLayout(log_widget)
-        log_layout.setContentsMargins(16, 4, 16, 12)
-        log_layout.setSpacing(6)
-        log_layout.addWidget(log_label)
-        log_layout.addWidget(self.log_view)
-
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(top_widget)
-        splitter.addWidget(log_widget)
-        # The controls take the space; the log is a status strip, not the view.
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([620, 120])
-        self.log_view.setMinimumHeight(80)
-        log_widget.setMinimumHeight(110)
-
-        self.setCentralWidget(splitter)
+        self.setCentralWidget(central)
 
     def _wire_events(self) -> None:
         self.run_auto_button.clicked.connect(self._run_auto)
@@ -767,8 +726,10 @@ class MainWindow(QMainWindow):
         self._saved_pair_folders = self._current_folder_inputs()
         paired = sum(1 for new_rel in self._saved_pair_map.values() if new_rel)
         removed = len(self._saved_pair_map) - paired
-        self._log(f"Manual pairing saved: {paired} pair(s), {removed} old file(s) marked removed.")
-        self.statusBar().showMessage("Manual pairing saved — click Run Manual Compare to use it")
+        self._log(
+            f"Manual pairing saved: {paired} pair(s), {removed} removed — "
+            "click Run Manual Compare to use it"
+        )
         return True
 
     def _choose_folder(self, target: QLineEdit) -> None:
@@ -829,7 +790,6 @@ class MainWindow(QMainWindow):
 
         self._pending_output_path = output_path
         self._review_renames_this_run = review_renames
-        self.log_view.clear()
         pairing = "manual pairing" if pair_map is not None else "auto pairing"
         review = ", rename review" if review_renames else ""
         self._log(f"Starting comparison ({pairing}{review})...")
@@ -893,20 +853,17 @@ class MainWindow(QMainWindow):
         self._set_actions_enabled(True)
         self.open_button.setEnabled(True)
         self.last_report = report_path
-        self._log(f"Report generated: {report_path}")
-        self._log(f"Total changes: {summary['Total Changes']}")
         self._save_paths()
         ts = datetime.now().strftime("%H:%M")
         self.statusBar().showMessage(
-            f"Last run: {summary['Total Changes']} total changes  ·  {ts}"
+            f"Report generated: {report_path.name}  ·  {summary['Total Changes']} total changes  ·  {ts}"
         )
 
     def _failed(self, message: str) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self._set_actions_enabled(True)
-        self._log(f"Failed: {message}")
-        self.statusBar().showMessage("Failed — see log for details")
+        self.statusBar().showMessage(f"Failed: {message}")
         QMessageBox.critical(self, "Comparison Failed", message)
 
     def _open_report(self) -> None:
@@ -973,7 +930,9 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _log(self, message: str) -> None:
-        self.log_view.append(message)
+        # No log panel: the status bar always shows the latest step, which is
+        # what a run-and-watch-the-report workflow actually needs.
+        self.statusBar().showMessage(message)
 
 
 def main() -> int:
