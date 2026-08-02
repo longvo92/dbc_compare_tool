@@ -9,9 +9,13 @@ heading with its date. See [Releasing](README.md#releasing) for the procedure.
 
 ## [Unreleased]
 
+### Added
+
+- **Open Report** button next to Export Excel in the Signal Focus results window, to open the exported report without hunting for it.
+
 ### Changed
 
-- Simplify the interface: removed the execution log panel and redundant section titles, and progress and results now show in the status bar instead.
+- Simplify the interface: removed redundant section titles, moved the Baseline Compare "Include Change Types" checkboxes out of their own card, and Signal Focus progress now shows in the status bar instead of a shared log.
 
 ## [0.2.0] - 2026-08-02
 

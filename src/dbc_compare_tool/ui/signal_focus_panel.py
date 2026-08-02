@@ -11,6 +11,7 @@ setup controls left it one row tall.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSettings, QThread, Signal
@@ -143,6 +144,7 @@ class SignalFocusResultWindow(QDialog):
     """Comparison result in a window of its own, non-modal so the tab stays usable."""
 
     export_requested = Signal()
+    open_report_requested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -158,6 +160,9 @@ class SignalFocusResultWindow(QDialog):
         self.only_review_check = QCheckBox("Show only signals needing review")
         self.export_button = QPushButton("Export Excel")
         self.export_button.setObjectName("primaryButton")
+        self.open_report_button = QPushButton("Open Report")
+        self.open_report_button.setEnabled(False)
+        self.open_report_button.setToolTip("Open the exported report — export first.")
         self.table = QTableWidget(0, len(_RESULT_HEADERS))
 
         self.table.setHorizontalHeaderLabels(list(_RESULT_HEADERS))
@@ -183,6 +188,7 @@ class SignalFocusResultWindow(QDialog):
         top_row.addWidget(self.only_review_check)
         top_row.addStretch()
         top_row.addWidget(self.export_button)
+        top_row.addWidget(self.open_report_button)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
@@ -193,6 +199,7 @@ class SignalFocusResultWindow(QDialog):
 
         self.only_review_check.toggled.connect(self._render)
         self.export_button.clicked.connect(self.export_requested)
+        self.open_report_button.clicked.connect(self.open_report_requested)
 
         if geometry := self._settings.value("signal_focus_window_geometry"):
             self.restoreGeometry(geometry)
@@ -218,6 +225,9 @@ class SignalFocusResultWindow(QDialog):
             f"Moved {summary['Moved']}, Unchanged {summary['Unchanged']}\n{nodes}"
         )
         self.export_button.setEnabled(True)
+        # A fresh result invalidates whatever was last exported to disk.
+        self.open_report_button.setEnabled(False)
+        self.open_report_button.setToolTip("Open the exported report — export first.")
         self._render()
         self.show()
         self.raise_()
@@ -288,6 +298,7 @@ class SignalFocusPanel(QWidget):
         self._pair_worker: PairWorker | None = None
         self._focus_worker: FocusWorker | None = None
         self._export_worker: FocusExportWorker | None = None
+        self._last_report: Path | None = None
 
         self.old_input = DropLineEdit()
         self.new_input = DropLineEdit()
@@ -650,6 +661,8 @@ class SignalFocusPanel(QWidget):
         if self._result_window is None:
             self._result_window = SignalFocusResultWindow(self.window())
             self._result_window.export_requested.connect(self._export)
+            self._result_window.open_report_requested.connect(self._open_report)
+        self._last_report = None
         self._result_window.show_result(self._result)
 
     # -- export ------------------------------------------------------------
@@ -679,8 +692,22 @@ class SignalFocusPanel(QWidget):
 
     def _on_exported(self, path: Path) -> None:
         self._set_busy(False)
+        self._last_report = path
         self.log.emit(f"Signal focus report generated: {path}")
+        if self._result_window is not None:
+            self._result_window.open_report_button.setEnabled(True)
+            self._result_window.open_report_button.setToolTip(str(path))
         self._update_button_states()
+
+    def _open_report(self) -> None:
+        if self._last_report and self._last_report.exists():
+            os.startfile(self._last_report)
+        else:
+            QMessageBox.information(
+                self,
+                "Report Not Found",
+                "The report file no longer exists. Export the report again.",
+            )
 
     # -- shared ------------------------------------------------------------
 
@@ -695,6 +722,12 @@ class SignalFocusPanel(QWidget):
             button.setEnabled(not busy)
         if self._result_window is not None:
             self._result_window.export_button.setEnabled(not busy)
+            # Only re-enable Open Report if there is still a report to open —
+            # its own state, not general busy/idle, decides that.
+            if busy:
+                self._result_window.open_report_button.setEnabled(False)
+            elif self._last_report is not None:
+                self._result_window.open_report_button.setEnabled(True)
         self.busy_changed.emit(busy)
         if not busy:
             self._update_button_states()

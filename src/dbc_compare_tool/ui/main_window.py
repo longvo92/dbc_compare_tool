@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTextBrowser,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -143,6 +144,15 @@ QProgressBar {
 QProgressBar::chunk {
     background: #2563eb;
     border-radius: 4px;
+}
+QTextEdit#logView {
+    background: #1e2430;
+    color: #d6e2f3;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Cascadia Mono', 'Consolas', monospace;
+    font-size: 9pt;
+    padding: 6px;
 }
 QTextBrowser {
     background: #ffffff;
@@ -519,6 +529,7 @@ class MainWindow(QMainWindow):
         self.manual_pair_button = QPushButton("Manual Pairing…")
         self.open_button = QPushButton("Open Report")
         self.progress = QProgressBar()
+        self.log_view = QTextEdit()
         self.signal_focus_panel = SignalFocusPanel(self)
 
         # Manual pairing saved from the Manual Pairing dialog, plus the folder
@@ -632,8 +643,16 @@ class MainWindow(QMainWindow):
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
         self.open_button.setEnabled(False)
+        self.log_view.setObjectName("logView")
+        self.log_view.setReadOnly(True)
+        self.log_view.setMinimumHeight(140)
 
-        # Tab 1 — the folder-to-folder baseline comparison
+        log_label = QLabel("Execution Log")
+        log_label.setObjectName("hintLabel")
+
+        # Tab 1 — the folder-to-folder baseline comparison. The log has no
+        # addStretch() after it: it is the one widget in this tab meant to
+        # expand and take whatever vertical space the window has to spare.
         baseline_content = QWidget()
         baseline_layout = QVBoxLayout(baseline_content)
         baseline_layout.setContentsMargins(0, 0, 0, 0)
@@ -641,7 +660,8 @@ class MainWindow(QMainWindow):
         baseline_layout.addWidget(input_group)
         baseline_layout.addLayout(filter_layout)
         baseline_layout.addLayout(buttons)
-        baseline_layout.addStretch()
+        baseline_layout.addWidget(log_label)
+        baseline_layout.addWidget(self.log_view)
         baseline_tab = _scrollable(baseline_content)
 
         # Tab 2 — application-layer signal view
@@ -677,7 +697,10 @@ class MainWindow(QMainWindow):
         self.open_button.clicked.connect(self._open_report)
         self.old_input.textChanged.connect(self._invalidate_saved_pairing)
         self.new_input.textChanged.connect(self._invalidate_saved_pairing)
-        self.signal_focus_panel.log.connect(self._log)
+        # Signal Focus messages go straight to the status bar rather than the
+        # Baseline Compare tab's Execution Log, which is specific to that
+        # workflow and not visible while the Signal Focus tab is active.
+        self.signal_focus_panel.log.connect(self.statusBar().showMessage)
         self.signal_focus_panel.busy_changed.connect(self._on_focus_busy)
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -790,6 +813,7 @@ class MainWindow(QMainWindow):
 
         self._pending_output_path = output_path
         self._review_renames_this_run = review_renames
+        self.log_view.clear()
         pairing = "manual pairing" if pair_map is not None else "auto pairing"
         review = ", rename review" if review_renames else ""
         self._log(f"Starting comparison ({pairing}{review})...")
@@ -853,17 +877,20 @@ class MainWindow(QMainWindow):
         self._set_actions_enabled(True)
         self.open_button.setEnabled(True)
         self.last_report = report_path
+        self._log(f"Report generated: {report_path}")
+        self._log(f"Total changes: {summary['Total Changes']}")
         self._save_paths()
         ts = datetime.now().strftime("%H:%M")
         self.statusBar().showMessage(
-            f"Report generated: {report_path.name}  ·  {summary['Total Changes']} total changes  ·  {ts}"
+            f"Last run: {summary['Total Changes']} total changes  ·  {ts}"
         )
 
     def _failed(self, message: str) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self._set_actions_enabled(True)
-        self.statusBar().showMessage(f"Failed: {message}")
+        self._log(f"Failed: {message}")
+        self.statusBar().showMessage("Failed — see log for details")
         QMessageBox.critical(self, "Comparison Failed", message)
 
     def _open_report(self) -> None:
@@ -930,9 +957,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _log(self, message: str) -> None:
-        # No log panel: the status bar always shows the latest step, which is
-        # what a run-and-watch-the-report workflow actually needs.
-        self.statusBar().showMessage(message)
+        self.log_view.append(message)
 
 
 def main() -> int:
