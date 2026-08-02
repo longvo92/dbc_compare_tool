@@ -23,8 +23,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_PKG = REPO_ROOT / "src" / "dbc_compare_tool"
 RESOURCES = REPO_ROOT / "resources"
+# Help > Changelog reads this; it lives at the repo root, so every build has to
+# copy it in beside the other resources.
+CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 DIST = REPO_ROOT / "dist"
 APP_NAME = "DbcCompareTool"
+_ADD_DATA_SEP = ";" if sys.platform == "win32" else ":"
 
 
 def find_python() -> str:
@@ -83,6 +87,7 @@ def build_pyz(version: str) -> Path:
     # _resource_path() resolves to the folder containing the .pyzw,
     # so resources/ must sit next to it.
     shutil.copytree(RESOURCES, DIST / "resources", dirs_exist_ok=True)
+    shutil.copy2(CHANGELOG, DIST / "resources" / CHANGELOG.name)
     return target
 
 
@@ -105,7 +110,9 @@ def build_exe(version: str) -> Path:
         "--paths",
         str(REPO_ROOT / "src"),
         "--add-data",
-        f"{RESOURCES}{';' if sys.platform == 'win32' else ':'}resources",
+        f"{RESOURCES}{_ADD_DATA_SEP}resources",
+        "--add-data",
+        f"{CHANGELOG}{_ADD_DATA_SEP}resources",
         "--distpath",
         str(DIST),
         "--workpath",

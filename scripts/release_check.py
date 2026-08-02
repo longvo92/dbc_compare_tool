@@ -10,8 +10,8 @@ version and writing the release notes stays a reviewed pull request.
 Verified:
   * the version is a plain X.Y.Z
   * src/dbc_compare_tool/__init__.py and pyproject.toml agree with it
-  * resources/help/release_notes.md documents it as the newest version, with a
-    non-empty body
+  * CHANGELOG.md documents it as the newest released version, with a non-empty
+    body, and nothing is left sitting under [Unreleased]
 
 With --notes, that section is written out for `gh release create --notes-file`.
 """
@@ -26,12 +26,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INIT_FILE = REPO_ROOT / "src" / "dbc_compare_tool" / "__init__.py"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-RELEASE_NOTES = REPO_ROOT / "resources" / "help" / "release_notes.md"
+CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 _INIT_VERSION = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.MULTILINE)
 _PYPROJECT_VERSION = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
-_NOTES_HEADING = re.compile(r"^## Version\s+(\S+)\s*$", re.MULTILINE)
+# "## [0.2.0] - 2026-08-02" and "## [Unreleased]"; the date separator may be a
+# hyphen or an em dash, and the date itself is optional.
+_CHANGELOG_HEADING = re.compile(r"^## \[([^\]]+)\](?:\s*[-—]\s*(\S+))?\s*$", re.MULTILINE)
+UNRELEASED = "Unreleased"
 
 
 class ReleaseCheckError(Exception):
@@ -52,24 +55,47 @@ def read_pyproject_version(text: str) -> str:
     return match.group(1)
 
 
-def extract_release_notes(text: str, version: str) -> str:
-    """The body of the "## Version <version>" section, which must be the newest one."""
-    headings = list(_NOTES_HEADING.finditer(text))
-    if not headings:
-        raise ReleaseCheckError("no '## Version X.Y.Z' section found in the release notes")
+def _section_body(text: str, headings: list[re.Match], index: int) -> str:
+    start = headings[index].end()
+    end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+    # Sections are separated by a --- rule that belongs to neither of them.
+    return text[start:end].strip().strip("-").strip()
 
-    newest = headings[0].group(1)
+
+def extract_release_notes(text: str, version: str) -> str:
+    """The body of the "## [<version>]" section, which must be the newest release.
+
+    An [Unreleased] section is allowed above it but has to be empty: anything
+    still sitting there is a change that would ship without being announced.
+    """
+    headings = list(_CHANGELOG_HEADING.finditer(text))
+    if not headings:
+        raise ReleaseCheckError("no '## [X.Y.Z]' section found in CHANGELOG.md")
+
+    index = 0
+    if headings[0].group(1) == UNRELEASED:
+        if _section_body(text, headings, 0):
+            raise ReleaseCheckError(
+                "CHANGELOG.md still has entries under [Unreleased] — move them under "
+                f"'## [{version}]' before releasing"
+            )
+        index = 1
+
+    if index >= len(headings):
+        raise ReleaseCheckError("CHANGELOG.md has no released version section")
+
+    newest = headings[index].group(1)
     if newest != version:
         raise ReleaseCheckError(
-            f"the newest release-notes section is {newest}, not {version} — "
+            f"the newest CHANGELOG.md section is {newest}, not {version} — "
             "releases are cut from the top of the file"
         )
+    if not headings[index].group(2):
+        raise ReleaseCheckError(f"the CHANGELOG.md section for {version} has no date")
 
-    start = headings[0].end()
-    end = headings[1].start() if len(headings) > 1 else len(text)
-    body = text[start:end].strip().rstrip("-").strip()
+    body = _section_body(text, headings, index)
     if not body:
-        raise ReleaseCheckError(f"the release-notes section for {version} is empty")
+        raise ReleaseCheckError(f"the CHANGELOG.md section for {version} is empty")
     return body
 
 
@@ -89,7 +115,7 @@ def check(version: str) -> str:
             f"pyproject.toml says {pyproject_version}, the release asks for {version}"
         )
 
-    return extract_release_notes(RELEASE_NOTES.read_text(encoding="utf-8"), version)
+    return extract_release_notes(CHANGELOG.read_text(encoding="utf-8"), version)
 
 
 def main() -> int:

@@ -10,7 +10,12 @@ Long Vo Thien
 
 ## Description
 
-Desktop utility for comparing Automotive CAN DBC baseline folders and generating Excel-based change reports.
+Desktop utility for comparing Automotive CAN DBC baselines and generating Excel-based change reports.
+
+Two comparison modes:
+
+* **Baseline Compare** — every message and signal change between two baseline folders.
+* **Signal Focus** — what changed for the signals of one ECU node, from an application point of view: data type, scaling, range, unit, value table, init value, direction.
 
 Key capabilities:
 
@@ -18,6 +23,7 @@ Key capabilities:
 * Message rename detection using CAN layout and message attributes.
 * Signal rename detection using signal layout and technical properties.
 * Detailed change tracking for Added, Removed, Modified, and Renamed items, with a confidence level on every detected rename.
+* Per-value comparison of value tables, so a raw value that kept its number but changed meaning stands out.
 
 ## Version
 

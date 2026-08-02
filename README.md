@@ -1,6 +1,7 @@
 # DBC Compare Tool
 
 [![Test](https://github.com/longvo92/dbc-compare-tool/actions/workflows/test.yml/badge.svg)](https://github.com/longvo92/dbc-compare-tool/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/longvo92/dbc-compare-tool)](https://github.com/longvo92/dbc-compare-tool/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#requirements)
@@ -149,7 +150,7 @@ Build distributables (zipapp and/or one-file `.exe`):
 
 Two moves, on purpose.
 
-1. A normal pull request bumps the version in `src/dbc_compare_tool/__init__.py` and `pyproject.toml`, and adds the `## Version X.Y.Z` section at the top of [resources/help/release_notes.md](resources/help/release_notes.md). Check it before pushing:
+1. A normal pull request bumps the version in `src/dbc_compare_tool/__init__.py` and `pyproject.toml`, and moves everything under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) into a new `## [X.Y.Z] - <date>` section. Check it before pushing:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\release_check.py 0.2.0
@@ -161,7 +162,7 @@ Two moves, on purpose.
 gh workflow run release.yml -f version=0.2.0
 ```
 
-That is a rehearsal: it verifies and uploads the artifacts without creating anything permanent. Add `-f publish=true` to tag `v0.2.0` and create the GitHub release. The workflow never edits the repository, and refuses a version that disagrees with the merged files or that was already tagged.
+That is a rehearsal: it verifies and uploads the artifacts without creating anything permanent. Add `-f publish=true` to tag `v0.2.0` and create the GitHub release, whose notes are the changelog section for that version. The workflow never edits the repository, and refuses a version that disagrees with the merged files, that still has entries under `## [Unreleased]`, or that was already tagged.
 
 ### Project Structure
 
@@ -188,12 +189,14 @@ src/dbc_compare_tool/
 
 The CLI covers the baseline comparison only; Signal Focus is a UI workflow over the same engine.
 
+Outside the package: `scripts/build.py` produces the distributables, `scripts/release_check.py` gates a release, `examples/` holds the sample baselines and a sample signal list, and `tests/` mirrors the layers above.
+
 The comparison engine has no UI dependency. See [docs/architecture.md](docs/architecture.md) for the rename-scoring strategy and known limitations.
 
 ## Documentation
 
 - [User Guide](resources/help/user_guide.md) — step-by-step usage, also in the app's Help menu
-- [Release Notes](resources/help/release_notes.md) — full changelog
+- [Changelog](CHANGELOG.md) — every released version, also in the app's Help menu
 - [Architecture](docs/architecture.md) — layers, data flow, rename scoring weights, validation status
 
 ## Contributing

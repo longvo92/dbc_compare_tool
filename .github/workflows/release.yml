@@ -3,8 +3,8 @@ name: Release
 # Cutting a release is two moves, on purpose.
 #
 #   1. A normal PR bumps the version in src/dbc_compare_tool/__init__.py and
-#      pyproject.toml, and adds the "## Version X.Y.Z" section at the top of
-#      resources/help/release_notes.md. A human merges it.
+#      pyproject.toml, and adds the "## [X.Y.Z] - <date>" section at the top of
+#      CHANGELOG.md, moving anything under [Unreleased] into it. A human merges it.
 #   2. This workflow is triggered against main:
 #
 #        gh workflow run release.yml -f version=0.2.0                  # rehearsal
@@ -62,8 +62,8 @@ jobs:
           python-version: "3.12"
 
       # Same script a person runs before triggering, so the answer here is never
-      # a surprise: the version matches __init__.py and pyproject.toml, and the
-      # release notes document it as the newest version.
+      # a surprise: the version matches __init__.py and pyproject.toml, CHANGELOG.md
+      # documents it as the newest release, and [Unreleased] is empty.
       - name: Check the version is ready
         shell: bash
         run: python scripts/release_check.py "${{ inputs.version }}" --notes RELEASE_NOTES.md

@@ -50,6 +50,18 @@ def _resource_path(filename: str) -> Path:
     return Path(__file__).resolve().parents[3] / "resources" / filename
 
 
+def _changelog_path() -> Path:
+    """CHANGELOG.md lives at the repository root, which no build ships.
+
+    scripts/build.py copies it in beside the other resources, so a build finds
+    it there; a source checkout falls back to the root copy itself.
+    """
+    bundled = _resource_path("CHANGELOG.md")
+    if bundled.is_file():
+        return bundled
+    return Path(__file__).resolve().parents[3] / "CHANGELOG.md"
+
+
 _STYLESHEET = """
 QMainWindow, QDialog {
     background-color: #f4f6fb;
@@ -553,14 +565,12 @@ class MainWindow(QMainWindow):
     def _build_menu(self) -> None:
         help_menu = self.menuBar().addMenu("Help")
         user_guide_action = help_menu.addAction("User Guide")
-        release_notes_action = help_menu.addAction("Release Notes")
+        changelog_action = help_menu.addAction("Changelog")
         about_action = help_menu.addAction("About")
         user_guide_action.triggered.connect(
             lambda: self._show_help_document("User Guide", "help/user_guide.md")
         )
-        release_notes_action.triggered.connect(
-            lambda: self._show_help_document("Release Notes", "help/release_notes.md")
-        )
+        changelog_action.triggered.connect(self._show_changelog)
         about_action.triggered.connect(lambda: self._show_help_document("About", "help/about.md"))
 
     def _build_layout(self) -> None:
@@ -932,10 +942,22 @@ class MainWindow(QMainWindow):
 
     def _show_help_document(self, title: str, filename: str) -> None:
         try:
-            content = _read_resource_text(filename).replace("{version}", __version__)
+            content = _read_resource_text(filename)
         except OSError as exc:
             QMessageBox.critical(self, title, f"Unable to open help file: {exc}")
             return
+        self._show_markdown(title, content)
+
+    def _show_changelog(self) -> None:
+        try:
+            content = _changelog_path().read_text(encoding="utf-8")
+        except OSError as exc:
+            QMessageBox.critical(self, "Changelog", f"Unable to open the changelog: {exc}")
+            return
+        self._show_markdown("Changelog", content)
+
+    def _show_markdown(self, title: str, content: str) -> None:
+        content = content.replace("{version}", __version__)
 
         dialog = QDialog(self)
         dialog.setWindowTitle(title)

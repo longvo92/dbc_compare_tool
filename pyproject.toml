@@ -33,7 +33,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/longvo92/dbc-compare-tool"
 Issues = "https://github.com/longvo92/dbc-compare-tool/issues"
-Changelog = "https://github.com/longvo92/dbc-compare-tool/blob/main/resources/help/release_notes.md"
+Changelog = "https://github.com/longvo92/dbc-compare-tool/blob/main/CHANGELOG.md"
 
 [project.scripts]
 dbc-compare-tool = "dbc_compare_tool.cli:main"
