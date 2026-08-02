@@ -1,16 +1,30 @@
-# DBC Compare Tool - Release Notes
+# Changelog
 
-## Version 0.2.0
+Everything worth knowing about a new version, written for the people who use the tool.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
+project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries land
+under `## [Unreleased]` as they are merged; cutting a release moves them under a version
+heading with its date. See [Releasing](README.md#releasing) for the procedure.
+
+## [Unreleased]
+
+## [0.2.0] - 2026-08-02
 
 ### Added
 
-- **Signal Focus tab**: a second comparison mode for application-layer work. Pick the ECU node your software runs on, optionally paste or import the list of signals it uses, and get a report about those signals only — data type, scaling, range, unit, value table, and init value. Frames, CAN IDs, DLC, cycle time, and bit positions are treated as transport details, so a signal that merely moved to another message is no longer reported as removed and added.
+- **Signal Focus tab**: a second comparison mode for application-layer work. Pick the ECU node your software runs on, optionally paste or import the list of signals it uses, and get a report about those signals only — data type, scaling, range, unit, value table, and init value. Frames, CAN IDs, DLC, cycle time, and bit positions are treated as transport details, so a signal that merely moved to another message is no longer reported as removed and added. The result opens in its own window, filterable and sortable, with its own Excel export.
 - **Per-value value-table comparison**: every changed `VAL_` entry is listed on its own, marked as relabeled, added, or removed. A raw value that kept its number but changed meaning is highlighted, since existing software keeps building against it silently.
 - **Init value comparison**: `GenSigStartValue` is now read and compared.
 - **Signal list import**: the application's signal list can be pasted directly or imported from a `.txt`/`.csv` file; comment lines and extra columns are ignored.
 
+### Changed
+
+- **Two-tab main window**: the folder-to-folder comparison moved into a **Baseline Compare** tab and works exactly as before. The window opens larger, the Execution Log takes less room, and a small window now scrolls instead of squeezing the controls.
+
 ---
-## Version 0.1.8
+
+## [0.1.8] - 2026-07-16
 
 ### Added
 
@@ -19,7 +33,8 @@
 - **Review renamed signals before export**: after a manual-compare run finishes, a review dialog lists every auto-detected signal rename with its confidence. Uncheck a row to reject the rename — it is then exported as a **Removed + Added** pair instead. **Run Auto Compare** keeps the fully automatic behavior.
 
 ---
-## Version 0.1.7
+
+## [0.1.7] - 2026-07-15
 
 ### Added
 
@@ -28,10 +43,15 @@
 ### Changed
 
 - Rewrote the **User Guide** with step-by-step usage instructions, a report sheet reference, and practical tips.
-- Cleaned up these Release Notes to focus on what matters to users.
+- Cleaned up the release notes to focus on what matters to users.
 
 ---
-## Version 0.1.6
+
+## [0.1.6] - 2026-07-14
+
+### Added
+
+- **Match reasons in the report**: renamed messages and signals now include a `Matched by: ...` line (e.g. `Start bit matched, Factor matched, Names are similar`) explaining why the pair was matched.
 
 ### Fixed
 
@@ -40,19 +60,17 @@
 - **Encoding support**: DBC files with special characters (e.g. `°C`) or unusual encodings now open reliably instead of causing an error.
 - **Safe exit**: closing the window while a comparison is running now asks for confirmation and shuts down cleanly instead of crashing.
 
-### Added
-
-- **Match reasons in the report**: renamed messages and signals now include a `Matched by: ...` line (e.g. `Start bit matched, Factor matched, Names are similar`) explaining why the pair was matched.
-
 ---
-## Version 0.1.5
+
+## [0.1.5] - 2026-07-12
 
 ### Changed
 
 - **Refreshed interface**: cleaner header with title and version badge, modern light theme with rounded panels and a dark console-style log area.
 
 ---
-## Version 0.1.4
+
+## [0.1.4] - 2026-06-14
 
 ### Added
 
@@ -66,7 +84,8 @@
 - **Resizable layout**: drag the divider between the input panel and the Execution Log to resize the log area.
 
 ---
-## Version 0.1.3
+
+## [0.1.3] - 2026-06-14
 
 ### Added
 
@@ -80,7 +99,8 @@
 - **Report styling** overhauled for readability: rows color-coded by change type (green = Added, salmon = Removed, yellow = Modified, blue = Renamed), highlighted confidence levels, report title and timestamp on the Summary sheet.
 
 ---
-## Version 0.1.2
+
+## [0.1.2] - 2026-06-07
 
 ### Changed
 
@@ -89,14 +109,16 @@
 - Cleaner, more readable comparison results.
 
 ---
-## Version 0.1.1
+
+## [0.1.1] - 2026-06-05
 
 ### Changed
 
 - Cleaner main window appearance and improved application icon.
 
 ---
-## Version 0.1.0
+
+## [0.1.0] - 2026-06-03
 
 First release.
 

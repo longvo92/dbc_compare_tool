@@ -59,10 +59,13 @@ This project is a local Windows desktop application for automotive engineers com
    - Runs comparison, pairing, and export on worker threads to keep the UI responsive.
    - Persists last-used folder paths, the signal list, and both report paths via
      `QSettings("DbcCompareTool", "DBCCompareTool")` (Windows registry).
+   - Help > Changelog renders `CHANGELOG.md`. That file lives at the repository root, which no build
+     ships, so `scripts/build.py` copies it in beside the other resources and `_changelog_path()`
+     falls back to the root copy in a source checkout.
 
 The dependency direction is one-way: `ui` and `cli` both import `core` and `report`, and nothing
 under `core` or `report` imports either of them. That is what lets CI run the full comparison with
-`cantools` and `openpyxl` installed but no `PySide6`.
+`cantools` and `openpyxl` installed but no `PySide6` — and it is why no test imports Qt.
 
 ## Entry Points
 
@@ -73,6 +76,27 @@ under `core` or `report` imports either of them. That is what lets CI run the fu
 
 The CLI always uses automatic pairing and keeps every detected rename; manual pairing, rename
 review, and Signal Focus are UI-only workflows built on the same engine calls.
+
+## Build and Release
+
+| Script | Role |
+|---|---|
+| `scripts/build.py` | Builds the one-file `.exe` (PyInstaller, resources bundled) and the `.pyzw` zipapp (resources copied next to it, because `_resource_path()` resolves to the folder containing the archive) |
+| `scripts/release_check.py` | The release gate: version format, `__init__.py` and `pyproject.toml` agreeing with the version being released, `CHANGELOG.md` documenting it as the newest dated section, and nothing left under `[Unreleased]`. Also extracts that section for the GitHub release body |
+
+Two workflows, deliberately split by who triggers them:
+
+- `.github/workflows/test.yml` runs on every push and pull request to `main`: the suite plus a CLI
+  comparison of the bundled examples, on Linux and Windows against Python 3.10 and 3.12. It installs
+  `cantools` and `openpyxl` only, which is what keeps the no-Qt rule honest.
+- `.github/workflows/release.yml` is `workflow_dispatch` only and refuses to run off `main`. It
+  reads; it never writes to the repository. The default run is a rehearsal — build both artifacts,
+  **start** both of them, upload, stop — and publishing takes an explicit `publish=true`. Starting
+  the artifacts is the point: a PyInstaller bundle missing a module fails there and nowhere else,
+  since the unit suite imports from source.
+
+`CHANGELOG.md` is the single source for release notes: the app's Help menu, the `Changelog` link in
+`pyproject.toml`, and the GitHub release body all resolve to it.
 
 ## Signal Focus Semantics
 
@@ -297,11 +321,31 @@ What that field testing did **not** cover yet — these remain unvalidated outsi
 | Vendor attributes (`BA_`) beyond cycle time, very large databases | Not exercised |
 | Signal Focus mode | Unit-tested only; not yet exercised on real project baselines |
 
+### What the suite covers
+
+One test module per layer, `unittest` only, no Qt import anywhere in `tests/`:
+
+| Module | Layer |
+|---|---|
+| `test_parser.py` | Parsing, including byte order and value type against a mixed-endian fixture |
+| `test_comparator.py`, `test_message_rename.py`, `test_rename.py` | Comparison and rename scoring |
+| `test_manual_pairing_and_review.py` | Manual pairing and rename rejection |
+| `test_value_and_comment.py` | `VAL_` and `CM_` comparison |
+| `test_robustness.py` | Frame-key collisions, parse-error resilience, discovery, encodings |
+| `test_signal_focus.py` | Node scoping, statuses, watchlist parsing, database pairing |
+| `test_report.py` | Both Excel writers, written to disk and read back with openpyxl |
+| `test_release_check.py` | The release gate, including against the real project files |
+
+The suite was checked by mutation rather than by coverage percentage: 26 deliberate defects were
+injected across the engine, the report writers and the models, and every one of them turned the
+suite red. That pass is what added `test_report.py` — before it, either writer could raise on save
+with the suite still green, which a release build would then have shipped.
+
 ## Known Risks
 
-- `BA_` attributes other than cycle time are not read at all (`parser.py` takes `cycle_time` from
-  cantools and nothing else), so a project that encodes meaning in custom attributes will see no
-  diff for them. Surfacing one means extending the parser, the models, and the Property Diff sheet.
+- `BA_` attributes other than `GenMsgCycleTime` and `GenSigStartValue` are not read at all, so a
+  project that encodes meaning in custom attributes will see no diff for them. Surfacing one means
+  extending the parser, the models, and the Property Diff sheet.
 - CAN FD handling may still need project-specific interpretation — see the table above.
 - The rename thresholds are a deliberate trade-off: at 0.60, `MessageRenameDetector` favours missing
   a CAN-ID-changed rename (reported as Removed + Added) over inventing a wrong one. Field use has not

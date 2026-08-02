@@ -19,16 +19,19 @@ release_check = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(release_check)
 
 
-_NOTES = """# DBC Compare Tool - Release Notes
+_NOTES = """# Changelog
 
-## Version 0.2.0
+## [Unreleased]
+
+## [0.2.0] - 2026-08-02
 
 ### Added
 
 - Signal Focus tab.
 
 ---
-## Version 0.1.8
+
+## [0.1.8] - 2026-07-16
 
 ### Added
 
@@ -60,6 +63,7 @@ class ReleaseNotesTests(unittest.TestCase):
         notes = release_check.extract_release_notes(_NOTES, "0.2.0")
         self.assertIn("Signal Focus tab", notes)
         self.assertNotIn("Manual DBC pairing", notes)
+        self.assertNotIn("Unreleased", notes)
         self.assertFalse(notes.endswith("-"), "the --- separator must not leak into the notes")
 
     def test_an_older_section_is_refused(self):
@@ -67,16 +71,32 @@ class ReleaseNotesTests(unittest.TestCase):
         with self.assertRaises(release_check.ReleaseCheckError):
             release_check.extract_release_notes(_NOTES, "0.1.8")
 
+    def test_entries_left_under_unreleased_are_refused(self):
+        pending = _NOTES.replace(
+            "## [Unreleased]\n", "## [Unreleased]\n\n### Added\n\n- Something unannounced.\n"
+        )
+        with self.assertRaises(release_check.ReleaseCheckError) as caught:
+            release_check.extract_release_notes(pending, "0.2.0")
+        self.assertIn("Unreleased", str(caught.exception))
+
     def test_an_empty_section_is_refused(self):
         with self.assertRaises(release_check.ReleaseCheckError):
-            release_check.extract_release_notes("# Notes\n\n## Version 0.3.0\n\n", "0.3.0")
+            release_check.extract_release_notes("# Notes\n\n## [0.3.0] - 2026-01-01\n\n", "0.3.0")
+
+    def test_a_section_without_a_date_is_refused(self):
+        with self.assertRaises(release_check.ReleaseCheckError):
+            release_check.extract_release_notes("# Notes\n\n## [0.3.0]\n\n- One thing.\n", "0.3.0")
 
     def test_a_file_without_sections_is_refused(self):
         with self.assertRaises(release_check.ReleaseCheckError):
             release_check.extract_release_notes("# Notes\n\nnothing here\n", "0.3.0")
 
     def test_the_last_section_runs_to_the_end_of_the_file(self):
-        single = "# Notes\n\n## Version 0.3.0\n\n### Added\n\n- One thing.\n"
+        single = "# Notes\n\n## [0.3.0] - 2026-01-01\n\n### Added\n\n- One thing.\n"
+        self.assertIn("One thing", release_check.extract_release_notes(single, "0.3.0"))
+
+    def test_an_em_dash_date_separator_is_accepted(self):
+        single = "# Notes\n\n## [0.3.0] — 2026-01-01\n\n- One thing.\n"
         self.assertIn("One thing", release_check.extract_release_notes(single, "0.3.0"))
 
 
