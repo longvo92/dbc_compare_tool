@@ -46,7 +46,7 @@ Workflow:
 1. Select both baseline folders and click **Load & Pair DBC** — files are paired with the same rules as the baseline comparison, renamed files included.
 2. Pick the ECU node on each side of every pair. **Apply First Node To All** copies one choice to every pair that offers the same node name.
 3. Paste the application's signal list, or import it from a `.txt`/`.csv`. Comment lines (`#`, `//`) and extra columns are ignored. Leave it empty to audit every signal of the node.
-4. **Run Signal Compare**. The result opens in its own window — filterable, sortable, and holding the **Export Excel** button. Rows default to the order of your signal list.
+4. **Run Signal Compare**. The result opens in its own window — filterable, sortable, and holding **Export Excel** and **Open Report**. Rows default to the order of your signal list.
 
 Each signal gets one status:
 

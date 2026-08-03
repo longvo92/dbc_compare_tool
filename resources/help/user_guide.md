@@ -10,7 +10,7 @@ The tool has two tabs. **Baseline Compare** reports every change between two DBC
 2. **New Baseline Folder** — select (or drag & drop) the folder containing the new DBC baseline.
 3. **Report Path** — choose where to save the Excel report (`.xlsx`).
 4. **Include Change Types** — tick the change categories you want in the report (Added / Removed / Modified / Renamed). All are included by default.
-5. Click **Run Auto Compare** for automatic file matching, or **Run Manual Compare** to use file pairs you chose yourself in the **Manual Pairing** dialog (see below). Progress appears in the Execution Log. When finished, click **Open Report** to view the result in Excel.
+5. Click **Run Auto Compare** for automatic file matching, or **Run Manual Compare** to use file pairs you chose yourself in the **Manual Pairing** dialog (see below). Progress appears in the Execution Log below, and the final result also shows in the status bar. When finished, click **Open Report** to view the result in Excel.
 
 The tool remembers your last-used folders and report path, so the next session starts pre-filled.
 
@@ -109,8 +109,9 @@ how often it is sent.
 5. Click **Run Signal Compare**. The result opens in its own window, so it gets the whole screen
    instead of a strip under the controls. Tick **Show only signals needing review** to hide
    everything that is fine, and click a column header to sort — the default order is the order of
-   your signal list. **Export Excel** is in that window; **Show Results** in the tab brings it back
-   if you closed it.
+   your signal list. **Show Results** in the tab brings the window back if you closed it.
+6. Click **Export Excel** to write the report, then **Open Report** next to it to view it. **Open
+   Report** stays disabled until something has actually been exported for the result currently shown.
 
 ### Signal Statuses
 
@@ -151,7 +152,6 @@ when you do need them.
 ## Tips
 
 * Drag a folder from Windows Explorer directly onto the baseline fields — no need to click Browse.
-* Drag the divider between the input panel and the Execution Log to resize the log area.
 * Untick change types you don't need before running to get a smaller, focused report.
 * If the report fails to save, make sure the file is not currently open in Excel.
 * In **Signal Focus**, keep your application's signal list in a `.txt` file next to the project and

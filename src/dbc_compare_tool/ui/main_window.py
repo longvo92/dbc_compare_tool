@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QProgressBar,
     QScrollArea,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -87,12 +86,6 @@ QLabel#versionBadge {
     padding: 2px 10px;
     font-size: 8pt;
     font-weight: 600;
-}
-QLabel#sectionLabel {
-    color: #6b7280;
-    font-size: 8pt;
-    font-weight: 700;
-    letter-spacing: 1px;
 }
 QLineEdit {
     background: #ffffff;
@@ -190,7 +183,6 @@ QStatusBar {
     background: #eef1f8;
     color: #4b5563;
 }
-QSplitter::handle { background: transparent; }
 QTableWidget {
     background: #ffffff;
     border: 1px solid #e1e5ee;
@@ -596,7 +588,7 @@ class MainWindow(QMainWindow):
         header.addWidget(subtitle)
 
         # Input form
-        input_group = QGroupBox("Baselines && Report")
+        input_group = QGroupBox()
         form = QGridLayout(input_group)
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(8)
@@ -619,9 +611,10 @@ class MainWindow(QMainWindow):
         output_button.clicked.connect(self._choose_report)
         form.addWidget(output_button, 2, 2)
 
-        # Filter group
-        filter_group = QGroupBox("Include Change Types")
-        filter_layout = QHBoxLayout(filter_group)
+        # Change-type filter — a plain row, not a card: it is four checkboxes
+        # that are all on by default, not a section worth its own title.
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(16)
         for chk in (self.chk_added, self.chk_removed, self.chk_modified, self.chk_renamed):
             filter_layout.addWidget(chk)
         filter_layout.addStretch()
@@ -649,19 +642,26 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
+        self.open_button.setEnabled(False)
         self.log_view.setObjectName("logView")
         self.log_view.setReadOnly(True)
-        self.open_button.setEnabled(False)
+        self.log_view.setMinimumHeight(140)
 
-        # Tab 1 — the folder-to-folder baseline comparison
+        log_label = QLabel("Execution Log")
+        log_label.setObjectName("hintLabel")
+
+        # Tab 1 — the folder-to-folder baseline comparison. The log has no
+        # addStretch() after it: it is the one widget in this tab meant to
+        # expand and take whatever vertical space the window has to spare.
         baseline_content = QWidget()
         baseline_layout = QVBoxLayout(baseline_content)
         baseline_layout.setContentsMargins(0, 0, 0, 0)
         baseline_layout.setSpacing(10)
         baseline_layout.addWidget(input_group)
-        baseline_layout.addWidget(filter_group)
+        baseline_layout.addLayout(filter_layout)
         baseline_layout.addLayout(buttons)
-        baseline_layout.addStretch()
+        baseline_layout.addWidget(log_label)
+        baseline_layout.addWidget(self.log_view)
         baseline_tab = _scrollable(baseline_content)
 
         # Tab 2 — application-layer signal view
@@ -680,36 +680,15 @@ class MainWindow(QMainWindow):
             "init value — ignoring frames and timing.",
         )
 
-        # Top pane: controls
-        top_widget = QWidget()
-        top_layout = QVBoxLayout(top_widget)
-        top_layout.setContentsMargins(16, 12, 16, 8)
-        top_layout.setSpacing(10)
-        top_layout.addLayout(header)
-        top_layout.addWidget(self.tabs)
-        top_layout.addWidget(self.progress)
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(16, 12, 16, 12)
+        central_layout.setSpacing(10)
+        central_layout.addLayout(header)
+        central_layout.addWidget(self.tabs)
+        central_layout.addWidget(self.progress)
 
-        # Bottom pane: log
-        log_label = QLabel("EXECUTION LOG")
-        log_label.setObjectName("sectionLabel")
-        log_widget = QWidget()
-        log_layout = QVBoxLayout(log_widget)
-        log_layout.setContentsMargins(16, 4, 16, 12)
-        log_layout.setSpacing(6)
-        log_layout.addWidget(log_label)
-        log_layout.addWidget(self.log_view)
-
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(top_widget)
-        splitter.addWidget(log_widget)
-        # The controls take the space; the log is a status strip, not the view.
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([620, 120])
-        self.log_view.setMinimumHeight(80)
-        log_widget.setMinimumHeight(110)
-
-        self.setCentralWidget(splitter)
+        self.setCentralWidget(central)
 
     def _wire_events(self) -> None:
         self.run_auto_button.clicked.connect(self._run_auto)
@@ -718,7 +697,10 @@ class MainWindow(QMainWindow):
         self.open_button.clicked.connect(self._open_report)
         self.old_input.textChanged.connect(self._invalidate_saved_pairing)
         self.new_input.textChanged.connect(self._invalidate_saved_pairing)
-        self.signal_focus_panel.log.connect(self._log)
+        # Signal Focus messages go straight to the status bar rather than the
+        # Baseline Compare tab's Execution Log, which is specific to that
+        # workflow and not visible while the Signal Focus tab is active.
+        self.signal_focus_panel.log.connect(self.statusBar().showMessage)
         self.signal_focus_panel.busy_changed.connect(self._on_focus_busy)
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -767,8 +749,10 @@ class MainWindow(QMainWindow):
         self._saved_pair_folders = self._current_folder_inputs()
         paired = sum(1 for new_rel in self._saved_pair_map.values() if new_rel)
         removed = len(self._saved_pair_map) - paired
-        self._log(f"Manual pairing saved: {paired} pair(s), {removed} old file(s) marked removed.")
-        self.statusBar().showMessage("Manual pairing saved — click Run Manual Compare to use it")
+        self._log(
+            f"Manual pairing saved: {paired} pair(s), {removed} removed — "
+            "click Run Manual Compare to use it"
+        )
         return True
 
     def _choose_folder(self, target: QLineEdit) -> None:

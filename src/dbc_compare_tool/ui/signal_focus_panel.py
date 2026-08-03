@@ -11,6 +11,7 @@ setup controls left it one row tall.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSettings, QThread, Signal
@@ -143,6 +144,7 @@ class SignalFocusResultWindow(QDialog):
     """Comparison result in a window of its own, non-modal so the tab stays usable."""
 
     export_requested = Signal()
+    open_report_requested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -158,6 +160,9 @@ class SignalFocusResultWindow(QDialog):
         self.only_review_check = QCheckBox("Show only signals needing review")
         self.export_button = QPushButton("Export Excel")
         self.export_button.setObjectName("primaryButton")
+        self.open_report_button = QPushButton("Open Report")
+        self.open_report_button.setEnabled(False)
+        self.open_report_button.setToolTip("Open the exported report — export first.")
         self.table = QTableWidget(0, len(_RESULT_HEADERS))
 
         self.table.setHorizontalHeaderLabels(list(_RESULT_HEADERS))
@@ -183,6 +188,7 @@ class SignalFocusResultWindow(QDialog):
         top_row.addWidget(self.only_review_check)
         top_row.addStretch()
         top_row.addWidget(self.export_button)
+        top_row.addWidget(self.open_report_button)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
@@ -193,11 +199,18 @@ class SignalFocusResultWindow(QDialog):
 
         self.only_review_check.toggled.connect(self._render)
         self.export_button.clicked.connect(self.export_requested)
+        self.open_report_button.clicked.connect(self.open_report_requested)
 
         if geometry := self._settings.value("signal_focus_window_geometry"):
             self.restoreGeometry(geometry)
 
-    def show_result(self, result: SignalFocusResult) -> None:
+    def show_result(self, result: SignalFocusResult, exported: Path | None = None) -> None:
+        """Display `result`; `exported` is the report already written for it, if any.
+
+        Reopening the window for an unchanged result must not forget that its
+        report is already on disk, so the caller passes that state in rather
+        than the window assuming nothing has been exported yet.
+        """
         self._result = result
         summary = result.summary()
         scope = (
@@ -218,10 +231,18 @@ class SignalFocusResultWindow(QDialog):
             f"Moved {summary['Moved']}, Unchanged {summary['Unchanged']}\n{nodes}"
         )
         self.export_button.setEnabled(True)
+        self.set_exported_report(exported)
         self._render()
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def set_exported_report(self, path: Path | None) -> None:
+        """Point Open Report at `path`, or disable it when nothing is exported."""
+        self.open_report_button.setEnabled(path is not None)
+        self.open_report_button.setToolTip(
+            str(path) if path is not None else "Open the exported report — export first."
+        )
 
     def _sort_by_column(self, column: int) -> None:
         if column == self._sort_column and self._sort_order == Qt.SortOrder.AscendingOrder:
@@ -288,6 +309,7 @@ class SignalFocusPanel(QWidget):
         self._pair_worker: PairWorker | None = None
         self._focus_worker: FocusWorker | None = None
         self._export_worker: FocusExportWorker | None = None
+        self._last_report: Path | None = None
 
         self.old_input = DropLineEdit()
         self.new_input = DropLineEdit()
@@ -309,7 +331,7 @@ class SignalFocusPanel(QWidget):
     # -- layout ------------------------------------------------------------
 
     def _build_layout(self) -> None:
-        folders = QGroupBox("Baselines")
+        folders = QGroupBox()
         grid = QGridLayout(folders)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(8)
@@ -337,14 +359,11 @@ class SignalFocusPanel(QWidget):
         grid.addLayout(pair_row, 2, 1, 1, 2)
 
         nodes_group = QGroupBox("ECU Node Per DBC Pair")
-        nodes_layout = QVBoxLayout(nodes_group)
-        node_hint = QLabel(
+        nodes_group.setToolTip(
             "Pick the node your application runs on. Signals the node sends or receives "
             "are compared; everything else is ignored."
         )
-        node_hint.setObjectName("hintLabel")
-        node_hint.setWordWrap(True)
-        nodes_layout.addWidget(node_hint)
+        nodes_layout = QVBoxLayout(nodes_group)
 
         self.pair_table.setHorizontalHeaderLabels(["DBC File", "Pairing", "Old Node", "New Node"])
         self.pair_table.verticalHeader().setVisible(False)
@@ -368,14 +387,11 @@ class SignalFocusPanel(QWidget):
         nodes_layout.addLayout(apply_row)
 
         signals_group = QGroupBox("Application Signal List")
-        signals_layout = QVBoxLayout(signals_group)
-        signal_hint = QLabel(
+        signals_group.setToolTip(
             "Paste one signal name per line, or import a .txt file. Comment lines (#, //) "
             "and extra columns are ignored. Leave empty to audit every signal of the node."
         )
-        signal_hint.setObjectName("hintLabel")
-        signal_hint.setWordWrap(True)
-        signals_layout.addWidget(signal_hint)
+        signals_layout = QVBoxLayout(signals_group)
 
         self.watchlist_edit.setPlaceholderText("VehicleSpeed\nIgnitionState\nBatterySoc")
         self.watchlist_edit.setMinimumHeight(84)
@@ -639,6 +655,8 @@ class SignalFocusPanel(QWidget):
     def _on_compared(self, result: SignalFocusResult) -> None:
         self._set_busy(False)
         self._result = result
+        # A new result invalidates whatever was exported for the previous one.
+        self._last_report = None
         summary = result.summary()
         self.log.emit(
             f"Signal focus: {summary['Total Signals']} signal(s), "
@@ -656,7 +674,8 @@ class SignalFocusPanel(QWidget):
         if self._result_window is None:
             self._result_window = SignalFocusResultWindow(self.window())
             self._result_window.export_requested.connect(self._export)
-        self._result_window.show_result(self._result)
+            self._result_window.open_report_requested.connect(self._open_report)
+        self._result_window.show_result(self._result, exported=self._last_report)
 
     # -- export ------------------------------------------------------------
 
@@ -684,9 +703,21 @@ class SignalFocusPanel(QWidget):
         self._export_worker.start()
 
     def _on_exported(self, path: Path) -> None:
+        # Set before _set_busy, which is what re-enables Open Report.
+        self._last_report = path
         self._set_busy(False)
         self.log.emit(f"Signal focus report generated: {path}")
         self._update_button_states()
+
+    def _open_report(self) -> None:
+        if self._last_report and self._last_report.exists():
+            os.startfile(self._last_report)
+        else:
+            QMessageBox.information(
+                self._result_window or self,
+                "Report Not Found",
+                "The report file no longer exists. Export the report again.",
+            )
 
     # -- shared ------------------------------------------------------------
 
@@ -701,6 +732,9 @@ class SignalFocusPanel(QWidget):
             button.setEnabled(not busy)
         if self._result_window is not None:
             self._result_window.export_button.setEnabled(not busy)
+            # Open Report follows whether a report exists, not busy/idle — but
+            # nothing is openable mid-export.
+            self._result_window.set_exported_report(None if busy else self._last_report)
         self.busy_changed.emit(busy)
         if not busy:
             self._update_button_states()
