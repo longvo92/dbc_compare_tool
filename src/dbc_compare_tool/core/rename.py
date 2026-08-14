@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Generic, Iterable, Protocol, TypeVar
 
-from dbc_compare_tool.core.models import Message, Signal
+from dbc_compare_tool.core.models import Message, Signal, jaccard
 
 
 T = TypeVar("T")
@@ -82,31 +82,36 @@ class GreedyRenameDetector(Generic[T]):
     def _adjust_for_ambiguity(
         self, candidates: list[RenameMatch[T]], old_items: list[T], new_items: list[T]
     ) -> list[RenameMatch[T]]:
-        """Reduce confidence for ambiguous matches where multiple old items could match a new item."""
-        # Count how many old signals match each new signal
+        """Reduce confidence for ambiguous matches where one item has rival matches.
+
+        Ambiguity is symmetric: several old items competing for one new item is
+        just as uncertain as several new items competing for one old item, so
+        both directions are counted.
+        """
         new_match_counts: dict[int, int] = {}
+        old_match_counts: dict[int, int] = {}
         for candidate in candidates:
-            new_id = id(candidate.new)
-            new_match_counts[new_id] = new_match_counts.get(new_id, 0) + 1
+            new_match_counts[id(candidate.new)] = new_match_counts.get(id(candidate.new), 0) + 1
+            old_match_counts[id(candidate.old)] = old_match_counts.get(id(candidate.old), 0) + 1
 
         adjusted_candidates = []
         for candidate in candidates:
-            new_id = id(candidate.new)
-            match_count = new_match_counts[new_id]
-
-            # If multiple candidates match the same new signal, reduce confidence
-            if match_count > 1:
-                confidence_reduction = 0.15 * (match_count - 1)
+            rivals = max(new_match_counts[id(candidate.new)], old_match_counts[id(candidate.old)])
+            if rivals > 1:
+                confidence_reduction = 0.15 * (rivals - 1)
                 reduced_confidence = max(self.medium_confidence_threshold, candidate.confidence - confidence_reduction)
-                new_reasons = list(candidate.reasons) + [f"Ambiguous: {match_count} old signals could match this new signal"]
-                adjusted_candidate = RenameMatch(
+                # Never report a score above the unadjusted one: for detectors
+                # whose threshold sits below the Medium floor (event-like
+                # signals at 0.65), the floor alone could otherwise raise it.
+                reduced_confidence = min(reduced_confidence, candidate.confidence)
+                new_reasons = list(candidate.reasons) + [f"Ambiguous: {rivals} rival matches for this signal"]
+                adjusted_candidates.append(RenameMatch(
                     old=candidate.old,
                     new=candidate.new,
                     confidence=reduced_confidence,
                     confidence_level=self.get_confidence_level(reduced_confidence),
                     reasons=tuple(new_reasons),
-                )
-                adjusted_candidates.append(adjusted_candidate)
+                ))
             else:
                 adjusted_candidates.append(candidate)
 
@@ -185,7 +190,7 @@ class MessageRenameDetector(GreedyRenameDetector[Message]):
             score += 0.10
             reasons.append("Signal count matched")
 
-        layout_score = _jaccard(old.signal_layout(), new.signal_layout())
+        layout_score = jaccard(old.signal_layout(), new.signal_layout())
         if layout_score:
             score += 0.22 * layout_score
             reasons.append(f"Signal layout {layout_score:.0%} matched")
@@ -286,12 +291,4 @@ class SignalRenameDetector(GreedyRenameDetector[Signal]):
 
 def _name_similarity(left: str, right: str) -> float:
     return SequenceMatcher(None, left.lower(), right.lower()).ratio()
-
-
-def _jaccard(left: set[tuple[object, ...]], right: set[tuple[object, ...]]) -> float:
-    if not left and not right:
-        return 1.0
-    if not left or not right:
-        return 0.0
-    return len(left & right) / len(left | right)
 

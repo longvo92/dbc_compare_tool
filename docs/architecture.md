@@ -297,11 +297,13 @@ A message counts as event-like (`EventMessageDetector.is_event_like`) when **all
 All old×new pairs are scored, those at or above the threshold become candidates, then candidates are
 taken in descending score order with each old and each new item used at most once (greedy one-to-one).
 
-Before that, ambiguity is penalised: when *n* old items are candidates for the same new item, each of
-those candidates loses `0.15 × (n − 1)`, floored at 0.70, and gains an "Ambiguous" reason. Two details
-follow from the order of operations — the penalty is applied *after* the threshold filter, so a
-penalised pair can end up scoring below its own detector threshold and still be matched, and the 0.70
-floor means an ambiguous match is never downgraded below Medium.
+Before that, ambiguity is penalised, and symmetrically: when *n* items on one side compete for the
+same item on the other — several old items for one new item, or several new items for one old item —
+each competing candidate loses `0.15 × (n − 1)` and gains an "Ambiguous" reason. Two details follow —
+the penalty is applied *after* the threshold filter, so a penalised pair can end up scoring below its
+own detector threshold and still be matched; and the reduced score is held at the 0.70 Medium floor
+but never raised above the candidate's own unadjusted score, which matters for event-like signals
+whose 0.65 threshold sits below that floor.
 
 Confidence levels shown in the UI and report: **High** ≥ 0.90, **Medium** ≥ 0.70, otherwise **Low**.
 

@@ -5,6 +5,15 @@ from pathlib import Path
 from typing import Any
 
 
+def jaccard(left: set[tuple[Any, ...]], right: set[tuple[Any, ...]]) -> float:
+    """Jaccard similarity of two sets. Two empty sets count as identical."""
+    if not left and not right:
+        return 1.0
+    if not left or not right:
+        return 0.0
+    return len(left & right) / len(left | right)
+
+
 @dataclass(frozen=True)
 class Signal:
     name: str

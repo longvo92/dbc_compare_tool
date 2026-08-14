@@ -17,6 +17,11 @@ heading with its date. See [Releasing](README.md#releasing) for the procedure.
 
 - Simplify the interface: removed redundant section titles, moved the Baseline Compare "Include Change Types" checkboxes out of their own card, and Signal Focus progress now shows in the status bar instead of a shared log.
 
+### Fixed
+
+- Improve rename-match confidence accuracy for ambiguous and event-like signals.
+- Warn instead of silently ignoring a message when a DBC reuses one CAN ID for two differently named messages.
+
 ## [0.2.0] - 2026-08-02
 
 ### Added
