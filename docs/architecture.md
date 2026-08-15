@@ -90,7 +90,7 @@ review, and Signal Focus are UI-only workflows built on the same engine calls.
 Two workflows, deliberately split by who triggers them:
 
 - `.github/workflows/test.yml` runs on every push and pull request to `main`: the suite plus a CLI
-  comparison of the bundled examples, on Linux and Windows against Python 3.10 and 3.12. It installs
+  comparison of the bundled examples, on Linux and Windows against Python 3.9, 3.10 and 3.12. It installs
   `cantools` and `openpyxl` only, which is what keeps the no-Qt rule honest.
 - `.github/workflows/release.yml` is `workflow_dispatch` only and refuses to run off `main`. It
   reads; it never writes to the repository. The default run is a rehearsal — build both artifacts,

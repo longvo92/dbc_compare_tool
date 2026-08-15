@@ -3,7 +3,7 @@
 [![Test](https://github.com/longvo92/dbc-compare-tool/actions/workflows/test.yml/badge.svg)](https://github.com/longvo92/dbc-compare-tool/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/longvo92/dbc-compare-tool)](https://github.com/longvo92/dbc-compare-tool/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#requirements)
 
 Desktop utility for comparing Automotive CAN DBC baseline folders and generating an engineering-grade Excel change report.
@@ -90,7 +90,7 @@ The Signal Focus tab writes its own workbook, four sheets:
 ## Requirements
 
 - Windows (the UI and path handling target Windows; the core engine is platform-agnostic)
-- Python 3.10 or newer
+- Python 3.9 or newer
 - Runtime dependencies: `cantools`, `openpyxl`, `PySide6` (`pyinstaller` is needed only for `scripts/build.py`)
 
 ## Install
@@ -137,7 +137,7 @@ Run the test suite:
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-CI runs the same suite on Linux and Windows against Python 3.10 and 3.12, plus a CLI comparison of the bundled example baselines. The comparison engine and the report writers have no UI dependency, so those runs install `cantools` and `openpyxl` only — no test imports Qt.
+CI runs the same suite on Linux and Windows against Python 3.9, 3.10 and 3.12, plus a CLI comparison of the bundled example baselines. The comparison engine and the report writers have no UI dependency, so those runs install `cantools` and `openpyxl` only — no test imports Qt.
 
 Build distributables (zipapp and/or one-file `.exe`):
 

@@ -1,5 +1,7 @@
 """Unit tests for rename detection logic."""
 
+from __future__ import annotations
+
 import unittest
 
 from dbc_compare_tool.core.models import Message, Signal
