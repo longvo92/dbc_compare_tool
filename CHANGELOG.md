@@ -9,6 +9,8 @@ heading with its date. See [Releasing](README.md#releasing) for the procedure.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-15
+
 ### Added
 
 - **Open Report** button next to Export Excel in the Signal Focus results window, to open the exported report without hunting for it.
@@ -16,11 +18,14 @@ heading with its date. See [Releasing](README.md#releasing) for the procedure.
 ### Changed
 
 - Simplify the interface: removed redundant section titles, moved the Baseline Compare "Include Change Types" checkboxes out of their own card, and Signal Focus progress now shows in the status bar instead of a shared log.
+- Lower the minimum Python version to 3.9, so the tool runs on machines that cannot upgrade.
 
 ### Fixed
 
 - Improve rename-match confidence accuracy for ambiguous and event-like signals.
 - Warn instead of silently ignoring a message when a DBC reuses one CAN ID for two differently named messages.
+
+---
 
 ## [0.2.0] - 2026-08-02
 
