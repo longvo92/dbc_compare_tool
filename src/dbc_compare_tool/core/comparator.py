@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any
 
 from dbc_compare_tool.core.discovery import collect_dbc_files, discover_dbc_pairs
-from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, FilePairSummary, Message
+from dbc_compare_tool.core.models import Change, ComparisonResult, DbcDatabase, FilePairSummary, Message, jaccard
 from dbc_compare_tool.core.parser import DbcParseError, parse_dbc
 from dbc_compare_tool.core.rename import EventMessageDetector, MessageRenameDetector, SignalRenameDetector
 
@@ -58,14 +58,6 @@ class DatabaseMatch:
 
 
 class DbcComparator:
-    def __init__(
-        self,
-        message_rename_detector: MessageRenameDetector | None = None,
-        signal_rename_detector: SignalRenameDetector | None = None,
-    ) -> None:
-        self.message_rename_detector = message_rename_detector
-        self.signal_rename_detector = signal_rename_detector
-
     def compare_folders(
         self,
         old_folder: Path,
@@ -385,7 +377,7 @@ class DbcComparator:
         unmatched_old_msgs = [old_by_id[fid] for fid in old_only_ids]
         unmatched_new_msgs = [new_by_id[fid] for fid in new_only_ids]
 
-        detector = self.message_rename_detector or MessageRenameDetector()
+        detector = MessageRenameDetector()
         rename_matches = detector.match(unmatched_old_msgs, unmatched_new_msgs)
 
         matched_old_ids = {_frame_key(match.old) for match in rename_matches}
@@ -474,7 +466,7 @@ class DbcComparator:
 
         # Detect if this is an event-like message and create appropriate detector
         is_event_like = EventMessageDetector.is_event_like(old_message) or EventMessageDetector.is_event_like(new_message)
-        signal_detector = self.signal_rename_detector or SignalRenameDetector(is_event_like=is_event_like)
+        signal_detector = SignalRenameDetector(is_event_like=is_event_like)
         rename_matches = signal_detector.match(unmatched_old, unmatched_new)
 
         for match in rename_matches:
@@ -690,7 +682,22 @@ def _format_property_value(key: str, value: object) -> str:
 def _messages_by_frame_id(database: DbcDatabase) -> dict[tuple[int, bool], Message]:
     # Standard and extended frames share the numeric ID space after masking,
     # so the extended flag must be part of the key to keep them distinct.
-    return {_frame_key(message): message for message in database.messages.values()}
+    by_id: dict[tuple[int, bool], Message] = {}
+    for message in database.messages.values():
+        key = _frame_key(message)
+        existing = by_id.get(key)
+        if existing is not None:
+            # Two differently-named messages share one frame ID; the comparison
+            # keys everything by frame ID, so one of them would silently drop
+            # out of the diff. Keep the last (matching prior behaviour) but warn.
+            warnings.warn(
+                f"Duplicate frame ID 0x{message.can_id:X} "
+                f"(extended={message.is_extended_frame}) in {database.path}: "
+                f"'{existing.name}' and '{message.name}'; only '{message.name}' is compared.",
+                stacklevel=2,
+            )
+        by_id[key] = message
+    return by_id
 
 
 def _frame_key(message: Message) -> tuple[int, bool]:
@@ -779,7 +786,7 @@ def _common_message_structure_score(
             score += 0.10
         if len(old.signals) == len(new.signals):
             score += 0.15
-        score += 0.40 * _jaccard(old.signal_layout(), new.signal_layout())
+        score += 0.40 * jaccard(old.signal_layout(), new.signal_layout())
         message_scores.append(score)
     return sum(message_scores) / len(message_scores)
 
@@ -792,11 +799,3 @@ def _format_file_pair_label(old_relative_path: str, new_relative_path: str) -> s
 
 def _count_signals(db: DbcDatabase) -> int:
     return sum(len(msg.signals) for msg in db.messages.values())
-
-
-def _jaccard(left: set[tuple[Any, ...]], right: set[tuple[Any, ...]]) -> float:
-    if not left and not right:
-        return 1.0
-    if not left or not right:
-        return 0.0
-    return len(left & right) / len(left | right)

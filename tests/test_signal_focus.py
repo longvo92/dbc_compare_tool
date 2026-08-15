@@ -442,7 +442,7 @@ BO_ 999 ChargeState: 4 Charger
 
 class PairDatabasesTests(unittest.TestCase):
     def _folders(self, old_files: dict[str, str], new_files: dict[str, str]):
-        # unittest.TestCase.enterContext needs Python 3.11+; the repo supports 3.10.
+        # unittest.TestCase.enterContext needs Python 3.11+; the repo supports 3.9.
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)

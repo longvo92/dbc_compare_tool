@@ -151,7 +151,7 @@ def main() -> int:
         print(f"Built: {path.relative_to(REPO_ROOT)} ({size_mb:.1f} MB)")
     if any(p.suffix == ".pyzw" for p in built):
         print("Note: ship dist/resources/ alongside the .pyzw; target machine needs")
-        print("      Python >=3.10 with: pip install PySide6 cantools openpyxl")
+        print("      Python >=3.9 with: pip install PySide6 cantools openpyxl")
     return 0
 
 

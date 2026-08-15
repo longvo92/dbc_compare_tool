@@ -1,11 +1,14 @@
 """Unit tests for rename detection logic."""
 
+from __future__ import annotations
+
 import unittest
 
 from dbc_compare_tool.core.models import Message, Signal
 from dbc_compare_tool.core.rename import (
     EventMessageDetector,
     MessageRenameDetector,
+    RenameMatch,
     SignalRenameDetector,
 )
 
@@ -74,6 +77,44 @@ class TestSignalRenameDetectorEventMode(unittest.TestCase):
         new = _make_signal("Door_Opened", start_bit=0, length=1)
         matches = detector.match([old], [new])
         self.assertEqual(len(matches), 1)
+
+
+class TestAmbiguityAdjustment(unittest.TestCase):
+    def test_two_old_rival_for_one_new_are_flagged(self):
+        detector = SignalRenameDetector()
+        old1 = _make_signal("A", start_bit=0, length=8)
+        old2 = _make_signal("B", start_bit=0, length=8)  # same layout as old1
+        new = _make_signal("X", start_bit=0, length=8)
+        matches = detector.match([old1, old2], [new])
+        self.assertEqual(len(matches), 1)  # greedy still picks one
+        self.assertTrue(any("Ambiguous" in r for r in matches[0].reasons))
+
+    def test_one_old_rival_for_two_new_are_flagged(self):
+        # Regression: old-side ambiguity used to go undetected.
+        detector = SignalRenameDetector()
+        old = _make_signal("A", start_bit=0, length=8)
+        new1 = _make_signal("X", start_bit=0, length=8)
+        new2 = _make_signal("Y", start_bit=0, length=8)
+        matches = detector.match([old], [new1, new2])
+        self.assertEqual(len(matches), 1)
+        self.assertTrue(any("Ambiguous" in r for r in matches[0].reasons))
+
+    def test_adjustment_never_raises_confidence(self):
+        # Regression: the fixed 0.70 floor used to raise event-like scores
+        # (threshold 0.65) above their unadjusted value.
+        detector = SignalRenameDetector(is_event_like=True)
+        old1 = _make_signal("a")
+        old2 = _make_signal("b")
+        new = _make_signal("x")
+        base = 0.66  # below the old fixed 0.70 floor
+        candidates = [
+            RenameMatch(old1, new, base, "Low", ()),
+            RenameMatch(old2, new, base, "Low", ()),
+        ]
+        adjusted = detector._adjust_for_ambiguity(candidates, [old1, old2], [new])
+        for match in adjusted:
+            self.assertLessEqual(match.confidence, base)
+            self.assertTrue(any("Ambiguous" in r for r in match.reasons))
 
 
 class TestMessageRenameDetector(unittest.TestCase):

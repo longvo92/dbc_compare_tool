@@ -77,7 +77,7 @@ Every detected rename carries a confidence score and a level — **High**, **Med
 Two situations lower confidence on purpose:
 
 * **Event Matrix messages** — messages containing many structurally similar signals. There, the technical properties carry almost no information (dozens of signals share them), so the signal name drives the match and confidence never reaches High. Review these rows.
-* **Ambiguous matches** — when several old signals are equally plausible matches for one new signal, all of them are downgraded and the report notes `Ambiguous: ...` in the match reasons.
+* **Ambiguous matches** — when several signals on one side are equally plausible matches for a single signal on the other, they are downgraded and the report notes `Ambiguous: ...` in the match reasons.
 
 ### Robust File Handling
 
