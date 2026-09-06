@@ -33,7 +33,6 @@ class Signal:
     multiplexer_signal: str | None = None
     value_descriptions: tuple[tuple[int, str], ...] = ()
     comment: str = ""
-    raw_initial: float | None = None
 
     def comparable_properties(self) -> dict[str, Any]:
         return {
@@ -72,9 +71,6 @@ class Message:
     signals: dict[str, Signal] = field(default_factory=dict)
     cycle_time_ms: int | None = None
     comment: str = ""
-    # Senders as a list; `transmitter` keeps the comma-joined form the
-    # baseline comparison reports, which cannot be split back reliably.
-    senders: tuple[str, ...] = ()
 
     def comparable_properties(self) -> dict[str, Any]:
         return {
@@ -95,7 +91,6 @@ class Message:
 class DbcDatabase:
     path: Path
     messages: dict[str, Message] = field(default_factory=dict)
-    nodes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -130,81 +125,6 @@ class Change:
     parent_message: str = ""
     confidence_level: str = ""  # "High", "Medium", "Low", or ""
     property_diffs: tuple[tuple[str, str, str], ...] = ()  # (property_name, old_value, new_value)
-
-
-@dataclass(frozen=True)
-class SignalRef:
-    """Where a signal sits, seen from one selected ECU node."""
-
-    signal: Signal
-    dbc_file: str
-    message_name: str
-    can_id: int
-    direction: str  # "Tx" | "Rx" | "Tx/Rx"
-
-
-@dataclass(frozen=True)
-class NodeSelection:
-    """One paired DBC plus the node picked on each side."""
-
-    dbc_file: str
-    old_path: str
-    new_path: str
-    old_node: str  # "" when the file exists on the new side only
-    new_node: str  # "" when the file exists on the old side only
-
-
-@dataclass(frozen=True)
-class SignalFocusRow:
-    signal_name: str
-    status: str
-    in_watchlist: bool
-    old_refs: tuple[SignalRef, ...] = ()
-    new_refs: tuple[SignalRef, ...] = ()
-    property_diffs: tuple[tuple[str, str, str], ...] = ()
-    value_table_diffs: tuple[tuple[str, str, str, str], ...] = ()  # raw, old label, new label, kind
-    note: str = ""
-
-
-@dataclass
-class SignalFocusResult:
-    selections: list[NodeSelection] = field(default_factory=list)
-    rows: list[SignalFocusRow] = field(default_factory=list)
-    watchlist_size: int = 0
-
-    def summary(self) -> dict[str, int]:
-        metrics = {status: 0 for status in SIGNAL_FOCUS_STATUSES}
-        for row in self.rows:
-            metrics[row.status] = metrics.get(row.status, 0) + 1
-        metrics["Total Signals"] = len(self.rows)
-        metrics["Needs Review"] = sum(
-            metrics.get(status, 0) for status in SIGNAL_FOCUS_ATTENTION_STATUSES
-        )
-        return metrics
-
-
-SIGNAL_FOCUS_STATUSES = (
-    "Removed",
-    "Modified",
-    "Added",
-    "Direction Changed",
-    "Out Of Node Scope",
-    "Ambiguous",
-    "Not In DBC",
-    "Moved",
-    "Unchanged",
-)
-
-# Statuses an application-layer engineer has to act on: the signal is gone,
-# its interpretation changed, or the tool cannot answer without a decision.
-SIGNAL_FOCUS_ATTENTION_STATUSES = (
-    "Removed",
-    "Modified",
-    "Direction Changed",
-    "Out Of Node Scope",
-    "Ambiguous",
-    "Not In DBC",
-)
 
 
 @dataclass

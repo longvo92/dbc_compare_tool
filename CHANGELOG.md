@@ -9,6 +9,16 @@ heading with its date. See [Releasing](README.md#releasing) for the procedure.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-06
+
+### Changed
+
+- Replace the two run buttons with a single **Run Compare**: it uses your manual pairing when that pairing covers every file, and pairs files automatically otherwise.
+
+### Removed
+
+- The Signal Focus tab. Baseline Compare — the folder-to-folder change report — is now the only comparison mode.
+
 ## [0.3.0] - 2026-08-15
 
 ### Added

@@ -1,8 +1,6 @@
 # User Guide
 
-The tool has two tabs. **Baseline Compare** reports every change between two DBC baselines.
-**Signal Focus** reports what changed for the software on one ECU — see
-[Signal Focus](#signal-focus) below.
+The tool reports every change between two DBC baselines.
 
 ## Getting Started
 
@@ -10,7 +8,7 @@ The tool has two tabs. **Baseline Compare** reports every change between two DBC
 2. **New Baseline Folder** — select (or drag & drop) the folder containing the new DBC baseline.
 3. **Report Path** — choose where to save the Excel report (`.xlsx`).
 4. **Include Change Types** — tick the change categories you want in the report (Added / Removed / Modified / Renamed). All are included by default.
-5. Click **Run Auto Compare** for automatic file matching, or **Run Manual Compare** to use file pairs you chose yourself in the **Manual Pairing** dialog (see below). Progress appears in the Execution Log below, and the final result also shows in the status bar. When finished, click **Open Report** to view the result in Excel.
+5. Click **Run Compare**. It uses the file pairs you saved in the **Manual Pairing** dialog when they cover every old file (see below); otherwise it matches files automatically. Progress appears in the Execution Log below, and the final result also shows in the status bar. When finished, click **Open Report** to view the result in Excel.
 
 The tool remembers your last-used folders and report path, so the next session starts pre-filled.
 
@@ -43,10 +41,10 @@ Example: `BCM.dbc` (old) vs `BCM_V2.dbc` (new) — detected as a renamed DBC fil
 If automatic matching does not pair the files the way you want, choose the pairs yourself:
 
 1. Select both baseline folders, then click **Manual Pairing…** to open the pairing dialog.
-2. For each old-baseline file, pick its new-baseline counterpart from the drop-down — or `— Removed (no pair) —` to report it as removed. New-baseline files not selected in any pair are reported as added.
-3. Click **Save** to store the pairing, then click **Run Manual Compare**.
+2. For each old-baseline file, pick its new-baseline counterpart from the drop-down. New-baseline files not selected in any pair are reported as added.
+3. Click **Save** to store the pairing, then click **Run Compare**.
 
-Clicking **Run Manual Compare** without a saved pairing simply uses automatic file matching — you still get the signal-rename review step. Manually matched pairs with different file names appear as **Manually Paired** on the DBC Overview sheet. Each new file can only be used in one pair. Changing either baseline folder discards the saved pairing — open the dialog again. **Run Auto Compare** always uses automatic matching, regardless of any saved pairing.
+**Run Compare** uses the saved pairing only when every old file is paired; leave any old file on `— Removed (no pair) —` and it falls back to automatic matching for the whole run. Manually matched pairs with different file names appear as **Manually Paired** on the DBC Overview sheet. Each new file can only be used in one pair. Changing either baseline folder discards the saved pairing — open the dialog again.
 
 ### Message Rename Detection
 
@@ -62,13 +60,13 @@ Example: `VehSpd` renamed to `VehicleSpeed` — classified as **Renamed**.
 
 ### Reviewing Renamed Signals
 
-Rename detection is heuristic, so **Run Manual Compare** lets you double-check it before the report is written: after the comparison finishes, a dialog lists every auto-detected signal rename with its confidence score and level (hover a row to see the match reasons and property changes).
+Rename detection is heuristic, so a run that uses a complete manual pairing lets you double-check it before the report is written: after the comparison finishes, a dialog lists every auto-detected signal rename with its confidence score and level (hover a row to see the match reasons and property changes).
 
 * Leave a row checked to **accept** the rename — it is reported as **Renamed**, as usual.
 * Uncheck a row to **reject** it — the report shows the old signal as **Removed** and the new signal as **Added** instead.
 * **Accept All** / **Reject All** buttons handle long lists; **Cancel** keeps all detected renames.
 
-**Run Auto Compare** skips this step and keeps every detected rename automatically.
+An automatic-pairing run skips this step and keeps every detected rename automatically.
 
 ### Confidence Levels
 
@@ -86,75 +84,8 @@ Two situations lower confidence on purpose:
 
 ---
 
-## Signal Focus
-
-Use this tab when you work on the application layer of one ECU and care about the signals themselves
-— data type, scaling, range, unit, value table, init value — not about which message carries them or
-how often it is sent.
-
-### Steps
-
-1. Select the **Old** and **New Baseline Folder**. Switching to this tab copies the folders from the
-   Baseline Compare tab if you have not filled them in yet.
-2. Click **Load & Pair DBC**. Files are paired the same way as in the baseline comparison, including
-   renamed files, and the ECU nodes of each file are loaded.
-3. For every pair, pick the ECU node your software runs on — separately for the old and the new side,
-   so a node renamed between baselines still works. **Apply First Node To All**, under the table,
-   copies your first choice to every other pair offering the same node name. Leave both drop-downs
-   on `— none —` to skip a pair.
-4. Paste your application's signal list into the text box, or click **Import .txt…**. One name per
-   line; comment lines starting with `#` or `//` are skipped, and everything after the first comma,
-   semicolon, or tab is ignored, so you can paste straight out of Excel. Leave the box empty to audit
-   every signal of the node.
-5. Click **Run Signal Compare**. The result opens in its own window, so it gets the whole screen
-   instead of a strip under the controls. Tick **Show only signals needing review** to hide
-   everything that is fine, and click a column header to sort — the default order is the order of
-   your signal list. **Show Results** in the tab brings the window back if you closed it.
-6. Click **Export Excel** to write the report, then **Open Report** next to it to view it. **Open
-   Report** stays disabled until something has actually been exported for the result currently shown.
-
-### Signal Statuses
-
-* **Removed** — the signal is gone from the DBC. Your code breaks. If a new signal has exactly the
-  same properties, its name is given in the note as a possible rename.
-* **Modified** — data type, scaling, range, unit, value table, or init value changed. Check every
-  place the signal is read or written.
-* **Added** — a new signal for this node.
-* **Direction Changed** — the ECU now sends what it used to receive, or the reverse. The port
-  direction in your software has to follow.
-* **Out Of Node Scope** — the signal is still in the DBC but is no longer sent to or from your node.
-  Usually a routing or receiver-list change rather than a deleted signal.
-* **Ambiguous** — the same name is defined more than once with different properties. Decide which one
-  you mean; the tool refuses to guess.
-* **Not In DBC** — the name is in your signal list but in none of the compared files. Almost always a
-  typo in the list.
-* **Moved** — only the carrying message, CAN ID, or bit position changed. Nothing to do; your
-  interface is unaffected.
-* **Unchanged** — no application-relevant difference.
-
-Start bit, byte order, CAN ID, DLC, cycle time, and transmitter are never reported as changes here.
-They belong to the communication stack, not to your application. Use the **Baseline Compare** tab
-when you do need them.
-
-### The Report
-
-* **Signal Focus Summary** — the node selected per DBC pair, the size of your signal list, and how
-  many signals fall into each status. **Needs Review** counts everything except `Moved` and
-  `Unchanged`.
-* **Signal Focus** — one row per signal, with its current properties and both carrier frames.
-* **Property Diff (App)** — one row per changed property, old value in salmon, new value in green.
-* **Value Table Diff** — one row per changed `VAL_` entry, marked **Relabeled**, **Value Added**, or
-  **Value Removed**. Read the relabeled ones first: the raw value kept its number but changed its
-  meaning, so your code still builds and now behaves wrongly.
-
----
-
 ## Tips
 
 * Drag a folder from Windows Explorer directly onto the baseline fields — no need to click Browse.
 * Untick change types you don't need before running to get a smaller, focused report.
 * If the report fails to save, make sure the file is not currently open in Excel.
-* In **Signal Focus**, keep your application's signal list in a `.txt` file next to the project and
-  re-import it for every baseline — the report then reads in the same order as your list.
-* If a node shows almost no received signals, check the DBC: receivers left as `Vector__XXX` are not
-  attributed to any node.

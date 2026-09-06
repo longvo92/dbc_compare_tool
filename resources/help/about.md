@@ -10,12 +10,7 @@ Long Vo Thien
 
 ## Description
 
-Desktop utility for comparing Automotive CAN DBC baselines and generating Excel-based change reports.
-
-Two comparison modes:
-
-* **Baseline Compare** — every message and signal change between two baseline folders.
-* **Signal Focus** — what changed for the signals of one ECU node, from an application point of view: data type, scaling, range, unit, value table, init value, direction.
+Desktop utility for comparing Automotive CAN DBC baselines and generating Excel-based change reports. It reports every message and signal change between two baseline folders.
 
 Key capabilities:
 
