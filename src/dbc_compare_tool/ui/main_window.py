@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -39,7 +38,6 @@ from dbc_compare_tool.core.comparator import DbcComparator, filter_result, rejec
 from dbc_compare_tool.core.discovery import collect_dbc_files
 from dbc_compare_tool.core.models import Change, ComparisonResult
 from dbc_compare_tool.report.excel import write_excel_report
-from dbc_compare_tool.ui.signal_focus_panel import SignalFocusPanel
 from dbc_compare_tool.ui.widgets import DropLineEdit, NoWheelComboBox
 
 
@@ -214,28 +212,6 @@ QLabel#hintLabel {
     color: #6b7280;
     font-size: 9pt;
 }
-QTabWidget::pane {
-    border: 1px solid #e1e5ee;
-    border-radius: 8px;
-    background: #f8f9fc;
-    top: -1px;
-}
-QTabBar::tab {
-    background: #e8ecf6;
-    border: 1px solid #e1e5ee;
-    border-bottom: none;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
-    padding: 7px 18px;
-    margin-right: 2px;
-    color: #4b5563;
-}
-QTabBar::tab:selected {
-    background: #f8f9fc;
-    color: #16213a;
-    font-weight: 600;
-}
-QTabBar::tab:hover:!selected { background: #eef2fb; }
 QPlainTextEdit {
     background: #ffffff;
     border: 1px solid #d4d9e4;
@@ -524,13 +500,11 @@ class MainWindow(QMainWindow):
         self.old_input = DropLineEdit()
         self.new_input = DropLineEdit()
         self.output_input = QLineEdit(str(Path.cwd() / "dbc_compare_report.xlsx"))
-        self.run_auto_button = QPushButton("Run Auto Compare")
-        self.run_manual_button = QPushButton("Run Manual Compare")
+        self.run_button = QPushButton("Run Compare")
         self.manual_pair_button = QPushButton("Manual Pairing…")
         self.open_button = QPushButton("Open Report")
         self.progress = QProgressBar()
         self.log_view = QTextEdit()
-        self.signal_focus_panel = SignalFocusPanel(self)
 
         # Manual pairing saved from the Manual Pairing dialog, plus the folder
         # inputs it was built for; invalidated when either folder changes.
@@ -545,7 +519,7 @@ class MainWindow(QMainWindow):
         for chk in (self.chk_added, self.chk_removed, self.chk_modified, self.chk_renamed):
             chk.setChecked(True)
 
-        # Manual runs always review detected signal renames before export.
+        # A manual-pairing run reviews detected signal renames before export.
         self._review_renames_this_run = False
 
         self._build_menu()
@@ -620,21 +594,17 @@ class MainWindow(QMainWindow):
         filter_layout.addStretch()
 
         # Action buttons
-        self.run_auto_button.setObjectName("primaryButton")
-        self.run_auto_button.setToolTip(
-            "Pair DBC files automatically by relative path and content similarity, then compare."
-        )
-        self.run_manual_button.setToolTip(
-            "Compare using the saved manual pairing (or auto pairing if none is saved), "
-            "then review each detected signal rename before the report is written."
+        self.run_button.setObjectName("primaryButton")
+        self.run_button.setToolTip(
+            "Compare the two baselines. Uses your saved manual pairing when it pairs every "
+            "old file; otherwise pairs files automatically by relative path and content similarity."
         )
         self.manual_pair_button.setToolTip(
             "Choose which new-baseline file each old-baseline file is compared against."
         )
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
-        buttons.addWidget(self.run_auto_button)
-        buttons.addWidget(self.run_manual_button)
+        buttons.addWidget(self.run_button)
         buttons.addWidget(self.manual_pair_button)
         buttons.addWidget(self.open_button)
         buttons.addStretch()
@@ -650,9 +620,9 @@ class MainWindow(QMainWindow):
         log_label = QLabel("Execution Log")
         log_label.setObjectName("hintLabel")
 
-        # Tab 1 — the folder-to-folder baseline comparison. The log has no
-        # addStretch() after it: it is the one widget in this tab meant to
-        # expand and take whatever vertical space the window has to spare.
+        # Folder-to-folder baseline comparison. The log has no addStretch()
+        # after it: it is the one widget meant to expand and take whatever
+        # vertical space the window has to spare.
         baseline_content = QWidget()
         baseline_layout = QVBoxLayout(baseline_content)
         baseline_layout.setContentsMargins(0, 0, 0, 0)
@@ -664,57 +634,22 @@ class MainWindow(QMainWindow):
         baseline_layout.addWidget(self.log_view)
         baseline_tab = _scrollable(baseline_content)
 
-        # Tab 2 — application-layer signal view
-        focus_tab = QWidget()
-        focus_layout = QVBoxLayout(focus_tab)
-        focus_layout.setContentsMargins(12, 12, 12, 12)
-        focus_layout.addWidget(self.signal_focus_panel)
-
-        self.tabs = QTabWidget()
-        self.tabs.addTab(baseline_tab, "Baseline Compare")
-        self._focus_tab_index = self.tabs.addTab(focus_tab, "Signal Focus")
-        self.tabs.setTabToolTip(0, "Compare two baselines message by message and export the full change report.")
-        self.tabs.setTabToolTip(
-            1,
-            "Compare the signals of one ECU node — data type, scaling, range, value table, "
-            "init value — ignoring frames and timing.",
-        )
-
         central = QWidget()
         central_layout = QVBoxLayout(central)
         central_layout.setContentsMargins(16, 12, 16, 12)
         central_layout.setSpacing(10)
         central_layout.addLayout(header)
-        central_layout.addWidget(self.tabs)
+        central_layout.addWidget(baseline_tab)
         central_layout.addWidget(self.progress)
 
         self.setCentralWidget(central)
 
     def _wire_events(self) -> None:
-        self.run_auto_button.clicked.connect(self._run_auto)
-        self.run_manual_button.clicked.connect(self._run_manual)
+        self.run_button.clicked.connect(self._run_compare)
         self.manual_pair_button.clicked.connect(self._open_manual_pairing)
         self.open_button.clicked.connect(self._open_report)
         self.old_input.textChanged.connect(self._invalidate_saved_pairing)
         self.new_input.textChanged.connect(self._invalidate_saved_pairing)
-        # Signal Focus messages go straight to the status bar rather than the
-        # Baseline Compare tab's Execution Log, which is specific to that
-        # workflow and not visible while the Signal Focus tab is active.
-        self.signal_focus_panel.log.connect(self.statusBar().showMessage)
-        self.signal_focus_panel.busy_changed.connect(self._on_focus_busy)
-        self.tabs.currentChanged.connect(self._on_tab_changed)
-
-    def _on_tab_changed(self, index: int) -> None:
-        if index == self._focus_tab_index:
-            self.signal_focus_panel.prefill_folders(*self._current_folder_inputs())
-
-    def _on_focus_busy(self, busy: bool) -> None:
-        if busy:
-            self.progress.setRange(0, 0)
-        else:
-            self.progress.setRange(0, 1)
-            self.progress.setValue(1)
-        self._set_actions_enabled(not busy)
 
     def _current_folder_inputs(self) -> tuple[str, str]:
         return (self.old_input.text().strip(), self.new_input.text().strip())
@@ -748,17 +683,24 @@ class MainWindow(QMainWindow):
         self._saved_pair_map = dialog.pair_map()
         self._saved_pair_folders = self._current_folder_inputs()
         paired = sum(1 for new_rel in self._saved_pair_map.values() if new_rel)
-        removed = len(self._saved_pair_map) - paired
-        self._log(
-            f"Manual pairing saved: {paired} pair(s), {removed} removed — "
-            "click Run Manual Compare to use it"
-        )
+        unpaired = len(self._saved_pair_map) - paired
+        if unpaired:
+            self._log(
+                f"Manual pairing saved: {paired} pair(s), {unpaired} old file(s) unpaired — "
+                "Run Compare falls back to auto pairing until every old file is paired"
+            )
+        else:
+            self._log(
+                f"Manual pairing saved: {paired} pair(s) — Run Compare will use it"
+            )
         return True
 
     def _choose_folder(self, target: QLineEdit) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Select Baseline Folder")
         if folder:
-            target.setText(folder)
+            # Qt hands back forward slashes; normalize to the native separator so
+            # every path field reads the same way.
+            target.setText(str(Path(folder)))
 
     def _choose_report(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -767,7 +709,7 @@ class MainWindow(QMainWindow):
         if path:
             if not path.lower().endswith(".xlsx"):
                 path += ".xlsx"
-            self.output_input.setText(path)
+            self.output_input.setText(str(Path(path)))
 
     def _selected_change_types(self) -> set[str]:
         types: set[str] = set()
@@ -781,17 +723,24 @@ class MainWindow(QMainWindow):
             types.add("Renamed")
         return types
 
-    def _run_auto(self) -> None:
-        self._start_compare(pair_map=None, review_renames=False)
+    def _complete_manual_pairing(self) -> dict[str, str | None] | None:
+        """The saved manual pairing, but only when it applies here and pairs
+        every old file. A pairing that still leaves an old file unpaired, or was
+        built for other folders, is ignored so the run falls back to auto."""
+        pair_map = self._saved_pair_map
+        if (
+            pair_map
+            and self._saved_pair_folders == self._current_folder_inputs()
+            and all(new_rel is not None for new_rel in pair_map.values())
+        ):
+            return pair_map
+        return None
 
-    def _run_manual(self) -> None:
-        # Use the saved manual pairing when available; otherwise fall back to
-        # auto pairing. Either way, signal renames are reviewed before export.
-        if self._saved_pair_map is not None and self._saved_pair_folders == self._current_folder_inputs():
-            pair_map = self._saved_pair_map
-        else:
-            pair_map = None
-        self._start_compare(pair_map=pair_map, review_renames=True)
+    def _run_compare(self) -> None:
+        # One button: a manual pairing that covers every old file wins and its
+        # renames are reviewed before export; anything else runs auto pairing.
+        pair_map = self._complete_manual_pairing()
+        self._start_compare(pair_map=pair_map, review_renames=pair_map is not None)
 
     def _start_compare(self, pair_map: dict[str, str | None] | None, review_renames: bool) -> None:
         old_text, new_text = self._current_folder_inputs()
@@ -827,8 +776,7 @@ class MainWindow(QMainWindow):
         self.worker.start()
 
     def _set_actions_enabled(self, enabled: bool) -> None:
-        self.run_auto_button.setEnabled(enabled)
-        self.run_manual_button.setEnabled(enabled)
+        self.run_button.setEnabled(enabled)
         self.manual_pair_button.setEnabled(enabled)
 
     def _on_compared(self, result: ComparisonResult) -> None:
@@ -859,12 +807,14 @@ class MainWindow(QMainWindow):
         self.export_worker.start()
 
     def _restore_paths(self) -> None:
+        # Older sessions may have stored forward-slash paths; normalize on load
+        # so all three fields use the native separator.
         if val := self._settings.value("last_old_folder"):
-            self.old_input.setText(str(val))
+            self.old_input.setText(str(Path(str(val))))
         if val := self._settings.value("last_new_folder"):
-            self.new_input.setText(str(val))
+            self.new_input.setText(str(Path(str(val))))
         if val := self._settings.value("last_report_path"):
-            self.output_input.setText(str(val))
+            self.output_input.setText(str(Path(str(val))))
 
     def _save_paths(self) -> None:
         self._settings.setValue("last_old_folder", self.old_input.text())
@@ -903,7 +853,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         running = [w for w in (self.worker, self.export_worker) if w and w.isRunning()]
-        running += self.signal_focus_panel.running_workers()
         if running:
             reply = QMessageBox.question(
                 self,
@@ -921,7 +870,6 @@ class MainWindow(QMainWindow):
                 worker.disconnect()
                 worker.terminate()
                 worker.wait(3000)
-        self.signal_focus_panel.save_state()
         event.accept()
 
     def _show_help_document(self, title: str, filename: str) -> None:

@@ -30,7 +30,7 @@ _NOTES = """# Changelog
 
 ### Added
 
-- Signal Focus tab.
+- Hexadecimal CAN IDs.
 
 ---
 
@@ -64,7 +64,7 @@ class VersionSourceTests(unittest.TestCase):
 class ReleaseNotesTests(unittest.TestCase):
     def test_extracts_only_the_newest_section(self):
         notes = release_check.extract_release_notes(_NOTES, "0.2.0")
-        self.assertIn("Signal Focus tab", notes)
+        self.assertIn("Hexadecimal CAN IDs", notes)
         self.assertNotIn("Manual DBC pairing", notes)
         self.assertNotIn("Unreleased", notes)
         self.assertFalse(notes.endswith("-"), "the --- separator must not leak into the notes")
@@ -186,7 +186,7 @@ class CommandLineTests(unittest.TestCase):
     def test_notes_file_holds_the_section_for_the_released_version(self):
         self.assertEqual(self._run("0.2.0", "--notes", str(self.notes_path)), 0)
         written = self.notes_path.read_text(encoding="utf-8")
-        self.assertIn("Signal Focus tab", written)
+        self.assertIn("Hexadecimal CAN IDs", written)
         self.assertNotIn("Manual DBC pairing", written, "older sections must not leak in")
         self.assertNotIn("Unreleased", written)
 
